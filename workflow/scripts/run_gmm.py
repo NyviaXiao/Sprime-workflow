@@ -13,7 +13,8 @@ from core import read, write, rate
 
 SELECTION = ['population', 'reference', 'n_segments', 'status', 'method', 'selected_components',
              'loglik_1', 'loglik_2', 'loglik_3', 'lr_1_vs_2', 'p_1_vs_2', 'adjusted_p_1_vs_2',
-             'second_comparison', 'lr_second', 'p_second', 'adjusted_p_second', 'converged']
+             'second_comparison', 'lr_second', 'p_second', 'adjusted_p_second',
+             'converged', 'aic_1', 'aic_2', 'aic_3', 'bic_1', 'bic_2', 'bic_3']
 COMPONENTS = ['population', 'reference', 'component', 'mean', 'standard_deviation', 'weight']
 
 
@@ -87,6 +88,11 @@ def analyze(s):
                       adjusted_p_1_vs_2=min(1., p12*family), second_comparison=f'{low}_vs_3',
                       lr_second=lr_next, p_second=p_next, adjusted_p_second=min(1., p_next*family*2), converged=True)
         result.update({f'loglik_{k}': models[k][1] for k in models})
+        # AIC/BIC are diagnostic values only. The configured LRT decision tree
+        # above remains the sole source of selected_components.
+        x_matrix = x.reshape(-1, 1)
+        result.update({f'aic_{k}': models[k][0].aic(x_matrix) for k in models})
+        result.update({f'bic_{k}': models[k][0].bic(x_matrix) for k in models})
         model = models[k][0]
         grid, density = np.linspace(0, 1, 500), np.zeros(500)
         ax.hist(x, bins=25, density=True, alpha=.5, edgecolor='black', linewidth=.5)

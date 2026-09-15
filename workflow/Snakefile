@@ -1,4 +1,5 @@
 from pathlib import Path
+import ast
 import hashlib
 
 # Short aliases are shared by all rule files included below.
@@ -8,9 +9,96 @@ CH = C['chromosomes']
 R = {r['id']: r for r in C['archaic_references']}
 ROOT = C['project_root']
 TASK = str(Path(ROOT) / 'workflow/scripts/task.py')
-# Make source-code changes part of each rule signature so Snakemake notices
-# logic updates even when biological inputs and output filenames are unchanged.
-CODE = hashlib.sha256(b''.join(p.read_bytes() for p in sorted((Path(ROOT) / 'workflow/scripts').glob('*.py')))).hexdigest()
+SCRIPT_DIR = Path(ROOT) / 'workflow/scripts'
+
+
+def _source_nodes(path):
+    """Return top-level AST nodes for a small, deterministic code signature."""
+    return ast.parse(Path(path).read_text(encoding='utf-8')).body
+
+
+def _node_text(path, names=()):
+    """Hashable source for selected top-level functions/constants."""
+    selected = []
+    for node in _source_nodes(path):
+        name = getattr(node, 'name', None)
+        assigned = [t.id for t in getattr(node, 'targets', []) if isinstance(t, ast.Name)]
+        if not names or name in names or any(x in names for x in assigned):
+            selected.append(ast.dump(node, include_attributes=False))
+    return '\n'.join(selected)
+
+
+def _task_branch(stage):
+    """Extract only the ``main`` branch that dispatches one stage.
+
+    ``task.py`` contains several independent stages. Hashing its whole file
+    would make an edit to GMM invalidate VCF preparation, so each rule gets
+    the AST for its own dispatch branch plus shared command/prologue code.
+    """
+    nodes = _source_nodes(SCRIPT_DIR / 'task.py')
+    main = next(n for n in nodes if isinstance(n, ast.FunctionDef) and n.name == 'main')
+    command = next(n for n in nodes if isinstance(n, ast.FunctionDef) and n.name == 'command')
+    path_helper = next(n for n in nodes if isinstance(n, ast.FunctionDef) and n.name == 'as_paths')
+    imports = [n for n in nodes if isinstance(n, (ast.Import, ast.ImportFrom))]
+    runtime = [n for n in nodes if not isinstance(n, (ast.Import, ast.ImportFrom, ast.FunctionDef))]
+    common = main.body[:3]  # docstring, config/stage and reference lookup
+    for node in main.body:
+        if not isinstance(node, ast.If):
+            continue
+        branches = []
+        branch = node
+        while isinstance(branch, ast.If):
+            branches.append(branch)
+            branch = branch.orelse[0] if len(branch.orelse) == 1 else None
+        for branch in branches:
+            if any(isinstance(x, ast.Constant) and x.value == stage for x in ast.walk(branch.test)):
+                shared = ast.Module(body=common, type_ignores=[])
+                return (ast.dump(ast.Module(body=imports, type_ignores=[]), include_attributes=False) +
+                        ast.dump(command, include_attributes=False) +
+                        ast.dump(path_helper, include_attributes=False) +
+                        ast.dump(ast.Module(body=runtime, type_ignores=[]), include_attributes=False) +
+                        ast.dump(shared, include_attributes=False) +
+                        ast.dump(branch, include_attributes=False))
+    raise ValueError(f'No task.py branch for stage {stage}')
+
+
+def _signature(stage, core_names=(), extra=()):
+    """Build a stage-local invalidation signature.
+
+    The signature intentionally names only functions used by a stage. This
+    prevents an unrelated edit to ``gmm_pass`` from invalidating classification
+    while still making edits to shared helpers invalidate their consumers.
+    """
+    chunks = [_task_branch(stage)]
+    if core_names:
+        chunks.append(_node_text(SCRIPT_DIR / 'core.py', core_names))
+    for path in extra:
+        chunks.append(Path(path).read_text(encoding='utf-8'))
+    return hashlib.sha256('\n'.join(chunks).encode()).hexdigest()
+
+
+SIG = {
+    'validate': _signature('validate', ['validate'], [SCRIPT_DIR / 'validate_inputs.py']),
+    'samples': _signature('samples', ['op', 'read', 'write']),
+    'subset': _signature('subset'),
+    'concat': _signature('concat'),
+    'sprime': _signature('sprime'),
+    'match': _signature('match', ['op', 'score_rows']),
+    'summarize': _signature('summarize', ['op', 'BASE', 'read', 'write', 'score_rows', 'summarize', 'summary_fields']),
+    'collect_tables': _signature('collect_tables', ['op', 'BASE', 'read', 'write', 'collect']),
+    'classify': _signature('classify', ['op', 'BASE', 'read', 'write', 'rate', 'classify', 'summary_fields']),
+    'classification_summary': _signature('classification_summary', ['op', 'read', 'write', 'classification_summary_rows']),
+    'gmm_base': _signature('gmm_base', ['op', 'BASE', 'read', 'write', 'score_rows', 'summarize', 'summary_fields']),
+    'gmm_input': _signature('gmm_input', ['op', 'BASE', 'read', 'write', 'rate', 'gmm_pass', 'gmm_target_pass', 'summary_fields']),
+    'gmm': _signature('gmm', ['op', 'read', 'write', 'rate'], [SCRIPT_DIR / 'run_gmm.py']),
+    'collect_gmm': _signature('collect_gmm', ['op', 'read', 'write', 'collect']),
+    'individual': _signature('individual', ['op', 'CALLS', 'read', 'write', 'score_rows', 'runs'], [SCRIPT_DIR / 'call_individual_tracts.py']),
+    'individual_pop': _signature('individual_pop', ['op', 'CALLS', 'read', 'write', 'collect']),
+    'collect': _signature('collect', ['op', 'collect']),
+    'individual_summary': _signature('individual_summary', ['op', 'CALLS', 'read', 'write', 'individual_summary_rows']),
+    'contour': _signature('contour', extra=[SCRIPT_DIR / 'plot_contour.R']),
+    'compile': _signature('compile'),
+}
 PAIRS = [f'{a}__{b}' for a,b in C['plots']['contour_pairs']]
 
 # Config-derived constraints prevent accidental wildcard matches across path
@@ -24,10 +112,11 @@ rule all:
         'tables/segment_match_rates.wide.tsv.gz',
         'tables/segment_match_rates.long.tsv.gz',
         'tables/population_match_summary.tsv',
+        'tables/classification_summary.tsv',
         expand('classification/{population}.tsv', population=P),
         expand('plots/{population}.{pair}.png', population=P, pair=PAIRS),
         ['gmm/model_selection.tsv', 'gmm/components.tsv'] if C['gmm']['enabled'] else [],
-        ['individual_calls/all_individual_calls.tsv.gz'] if C['individual']['enabled'] else []
+        ['individual_calls/all_individual_calls.tsv.gz', 'individual_calls/individual_summary.tsv'] if C['individual']['enabled'] else []
 
 # Convenience targets used by ``run.py --target ...``.
 rule matches:
@@ -37,7 +126,7 @@ rule gmm:
     input: ['gmm/model_selection.tsv', 'gmm/components.tsv'] if C['gmm']['enabled'] else []
 
 rule individual:
-    input: ['individual_calls/all_individual_calls.tsv.gz'] if C['individual']['enabled'] else []
+    input: ['individual_calls/all_individual_calls.tsv.gz', 'individual_calls/individual_summary.tsv'] if C['individual']['enabled'] else []
 
 # Rule files follow the biological analysis order. Snakemake still derives
 # execution order from file dependencies rather than include order.

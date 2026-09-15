@@ -4,7 +4,9 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'workflow/scripts'))
-from core import classify, collect, gmm_pass, read, runs, summarize, summary_fields, write
+from core import (classify, classification_summary_rows, collect, gmm_pass,
+                  gmm_target_pass, individual_summary_rows, read, runs,
+                  summarize, summary_fields, write)
 
 
 class CoreTests(unittest.TestCase):
@@ -41,14 +43,51 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(gmm_pass(row,cfg))
         self.assertFalse(gmm_pass({**row,'n_match_rate':.3},cfg))
         self.assertFalse(gmm_pass({**row,'d_callable':29},cfg))
-        self.assertFalse(gmm_pass({**row,'d2_match_rate':'NA'},cfg))
+        self.assertFalse(gmm_pass({**row,'d_callable':29,'d2_callable':29,'d2_match_rate':.9},cfg))
+        # A non-callable Deni reference is excluded; the callable Deni remains
+        # sufficient for candidate eligibility.
+        self.assertTrue(gmm_pass({**row,'d2_match_rate':'NA'},cfg))
+        self.assertTrue(gmm_pass({**row,'d2_callable':10,'d2_match_rate':.9},cfg))
+        self.assertFalse(gmm_pass({**row,'d_match_rate':'NA','d2_match_rate':'NA'},cfg))
+        self.assertFalse(gmm_pass({**row,'n_callable':29},cfg))
+        self.assertTrue(gmm_target_pass({**row,'d2_callable':10},cfg,'d'))
+        self.assertFalse(gmm_target_pass({**row,'d2_callable':10},cfg,'d2'))
 
-    def test_classification_and_missing(self):
-        cfg = dict(neanderthal_reference='n', denisovan_reference='d', neanderthal_gt=.6,
+    def test_multi_reference_classification_and_boundaries(self):
+        cfg = dict(neanderthal_references=['n1','n2'], denisovan_references=['d1','d2'], neanderthal_gt=.6,
                    denisovan_lt_for_neanderthal=.4, denisovan_gt=.3, neanderthal_lt_for_denisovan=.3)
-        for n,d,label in [(.8,.1,'neanderthal'),(.1,.8,'denisovan'),(.5,.5,'ambiguous'),
-                          (.1,.1,'ambiguous'),('NA',.5,'ambiguous')]:
-            self.assertEqual(classify({'n_match_rate':n,'d_match_rate':d},cfg),label)
+        self.assertEqual(classify({'n1_match_rate':.2,'n2_match_rate':.75,
+                                   'd1_match_rate':.1,'d2_match_rate':.2},cfg), 'neanderthal')
+        self.assertEqual(classify({'n1_match_rate':.1,'n2_match_rate':.2,
+                                   'd1_match_rate':.2,'d2_match_rate':.8},cfg), 'denisovan')
+        self.assertEqual(classify({'n1_match_rate':.8,'n2_match_rate':.2,
+                                   'd1_match_rate':.7,'d2_match_rate':.1},cfg), 'ambiguous')
+        for n,d in [(.6,.1),(.8,.4),(.1,.3),(.3,.8)]:
+            self.assertEqual(classify({'n1_match_rate':n,'n2_match_rate':'NA',
+                                       'd1_match_rate':d,'d2_match_rate':'NA'},cfg), 'ambiguous')
+        self.assertEqual(classify({'n1_match_rate':'NA','n2_match_rate':.2,
+                                   'd1_match_rate':.1,'d2_match_rate':'NA'},cfg), 'ambiguous')
+
+    def test_summary_rows(self):
+        classes = {'POP': [
+            {'chromosome':'1','segment_id':'a','archaic_class':'neanderthal'},
+            {'chromosome':'1','segment_id':'b','archaic_class':'ambiguous'}]}
+        wide = {'POP': [
+            {'chromosome':'1','segment_id':'a','length_bp':'1000000'},
+            {'chromosome':'1','segment_id':'b','length_bp':'2000000'}]}
+        result = classification_summary_rows(classes, wide, ['POP'])
+        self.assertEqual(result[0]['n_segments'], 1)
+        self.assertEqual(result[0]['genome_coverage_mb'], 1.0)
+        calls = {'POP': [
+            {'archaic_class':'denisovan','sample_id':'S1','length_bp':'1000000'},
+            {'archaic_class':'denisovan','sample_id':'S1','length_bp':'2000000'},
+            {'archaic_class':'neanderthal','sample_id':'S2','length_bp':'1000000'}]}
+        samples = [{'sample_id':'S1','population':'POP','role':'target'},
+                   {'sample_id':'S2','population':'POP','role':'target'}]
+        summary = individual_summary_rows(calls, samples, ['POP'])
+        deni = next(row for row in summary if row['archaic_class'] == 'denisovan')
+        self.assertEqual(deni['per_individual_introgressed_mb'], 1.5)
+        self.assertEqual(deni['n_introgressed_individuals'], 1)
 
     def test_collect_empty_tables(self):
         with tempfile.TemporaryDirectory() as tmp:

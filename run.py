@@ -71,7 +71,13 @@ def resolve_config(path, overrides):
     # Every reference named by a downstream module must exist and must have
     # the expected biological group.
     cl = c['classification']
-    used = [cl['neanderthal_reference'], cl['denisovan_reference']]
+    for key in ('neanderthal_references', 'denisovan_references'):
+        values = cl.get(key)
+        if not isinstance(values, list) or not values:
+            raise ValueError(f'classification.{key} must be a nonempty list')
+        if len(set(values)) != len(values):
+            raise ValueError(f'Duplicate reference in classification.{key}')
+    used = cl['neanderthal_references'] + cl['denisovan_references']
     g = c['gmm']
     for name, value in [('summary_min_callable', c['summary_min_callable']),
                         ('gmm.min_callable', g['min_callable']), ('gmm.min_segments', g['min_segments']),
@@ -95,8 +101,10 @@ def resolve_config(path, overrides):
     if not set(used) <= set(ids):
         raise ValueError(f'Unknown references: {set(used) - set(ids)}')
     groups = {r['id']: r['group'] for r in refs}
-    if groups[cl['neanderthal_reference']] != 'neanderthal' or groups[cl['denisovan_reference']] != 'denisovan':
-        raise ValueError('Classification reference groups do not match')
+    if any(groups[r] != 'neanderthal' for r in cl['neanderthal_references']):
+        raise ValueError('Classification Neanderthal references must have group neanderthal')
+    if any(groups[r] != 'denisovan' for r in cl['denisovan_references']):
+        raise ValueError('Classification Denisovan references must have group denisovan')
     if g['enabled']:
         for key, group in [('target_references', 'denisovan'), ('denisovan_references', 'denisovan'), ('neanderthal_references', 'neanderthal')]:
             if any(groups[r] != group for r in g[key]):
@@ -132,7 +140,12 @@ def main():
     # GNU Parallel pools, preventing accidental CPU oversubscription.
     cmd = ['snakemake', '--snakefile', str(ROOT / 'workflow/Snakefile'),
            '--directory', str(out), '--configfile', str(cfg), '--cores', str(a.cores),
-           '--resources', f'mem_mb={a.memory_mb}', '--rerun-incomplete', '--printshellcmds']
+           '--resources', f'mem_mb={a.memory_mb}', '--rerun-incomplete',
+           # All rules use one dispatcher script. Its whole-file Snakemake
+           # code hash would invalidate unrelated branches, so code changes
+           # are represented by the stage-local ``params.code`` signatures.
+           '--rerun-triggers', 'input', 'mtime', 'params', 'software-env',
+           '--printshellcmds']
     if a.dry_run:
         cmd.append('--dry-run')
     cmd.append(a.target)

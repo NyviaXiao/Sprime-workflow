@@ -4,6 +4,6 @@ if Path(C['map_arch']).resolve() == (Path(ROOT) / 'tools/map_arch/map_arch').res
     rule compile_map_arch:
         input: source=str(Path(ROOT) / 'tools/map_arch/map_arch.v2.c'), makefile=str(Path(ROOT) / 'tools/map_arch/makefile')
         output: C['map_arch']
-        params: stage='compile', code=CODE
+        params: stage='compile', code=SIG['compile']
         log: 'logs/compile_map_arch.log'
         script: TASK

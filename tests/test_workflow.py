@@ -39,7 +39,8 @@ class WorkflowTests(unittest.TestCase):
                     with contextlib.redirect_stdout(output):
                         wf.dag(DAGSettings(targets={'all'})).printdag()
                     dag = output.getvalue()
-                    for name in ('sprime','archaic_match','fit_gmm','individual_chr','contour'):
+                    for name in ('sprime','archaic_match','fit_gmm','individual_chr',
+                                 'classification_summary','individual_summary','contour'):
                         self.assertIn(name,dag)
 
 

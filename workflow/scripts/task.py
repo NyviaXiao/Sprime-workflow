@@ -15,7 +15,9 @@ from pathlib import Path
 
 # Snakemake executes a generated script; derive module location from config.
 sys.path.insert(0, str(Path(snakemake.config['project_root']) / 'workflow/scripts'))
-from core import BASE, CALLS, classify, collect, gmm_pass, read, score_rows, summarize, summary_fields, write
+from core import (BASE, CALLS, classify, classification_summary_rows, collect,
+                  gmm_target_pass, individual_summary_rows, read, score_rows,
+                  summarize, summary_fields, write)
 from validate_inputs import validate
 from call_individual_tracts import individuals
 
@@ -31,7 +33,13 @@ def command(args, output=None):
         with open(output, 'w') as f:
             subprocess.run(list(map(str, args)), check=True, stdout=f, stderr=sys.stderr)
     else:
-        subprocess.run(list(map(str, args)), check=True, stdout=sys.stdout, stderr=sys.stderr)
+            subprocess.run(list(map(str, args)), check=True, stdout=sys.stdout, stderr=sys.stderr)
+
+
+def as_paths(value):
+    """Normalize a named Snakemake input to a list without changing paths."""
+    return [value] if isinstance(value, (str, Path)) else list(value)
+
 
 def main(s):
     """Dispatch the current Snakemake job to its implementation stage."""
@@ -132,9 +140,20 @@ def main(s):
         rows = read(s.input[0])
         write(s.output[0], summary_fields(refs) + ['archaic_class'],
               ({**r, 'archaic_class': classify(r, c['classification'])} for r in rows))
+    elif stage == 'classification_summary':
+        # Count the already classified segments and sum their displayed marker
+        # span. Emit all three classes for every population, including zeros.
+        fields = ['population', 'archaic_class', 'n_segments', 'genome_coverage_mb']
+        class_rows = {population: read(path)
+                      for population, path in zip(c['populations'], as_paths(s.input.classification))}
+        length_rows = {population: read(path)
+                       for population, path in zip(c['populations'], as_paths(s.input.tables))}
+        write(s.output[0], fields,
+              classification_summary_rows(class_rows, length_rows, c['populations']))
     elif stage == 'gmm_input':
+        target = s.wildcards.ref
         passing_rows = (row for row in read(s.input[0])
-                        if gmm_pass(row, c['gmm']))
+                        if gmm_target_pass(row, c['gmm'], target))
         write(s.output[0], summary_fields(refs), passing_rows)
     elif stage == 'gmm':
         from run_gmm import analyze
@@ -152,6 +171,14 @@ def main(s):
         for output in list(s.output)[1:]:
             label = Path(output).name.split('.')[0]
             write(output, CALLS, (r for r in rows if r['archaic_class'] == label))
+    elif stage == 'individual_summary':
+        rows_by_population = {population: read(path)
+                              for population, path in zip(c['populations'], as_paths(s.input.calls))}
+        samples = read(s.input.samples)
+        fields = ['population', 'archaic_class', 'per_individual_introgressed_mb',
+                  'n_introgressed_individuals']
+        write(s.output[0], fields,
+              individual_summary_rows(rows_by_population, samples, c['populations']))
     elif stage == 'collect':
         collect(s.input, s.output[0])
     elif stage == 'contour':

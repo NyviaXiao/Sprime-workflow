@@ -41,7 +41,7 @@ gmm:
   enabled: true
   # Fit a separate GMM to the match-rate column of each target reference.
   target_references: [denisovan3, denisovan25]
-  # These lists define eligibility for the common GMM input segment set.
+  # These lists define group-level eligibility for GMM input segments.
   neanderthal_references: [altai_nean]
   denisovan_references: [denisovan3, denisovan25]
   # Reproduce pre_data.r: first retain marker rows with SCORE > score_gt,
@@ -50,8 +50,6 @@ gmm:
   score_gt: 150000
   neanderthal_rate_lt: 0.3
   denisovan_rate_gt: 0.3
-  # All specified references must have >= min_callable;
-  # all Nean rates < threshold, ANY Deni rate > threshold.
   min_segments: 10
   # Fixed seed and repeated starts make GMM output reproducible and reduce
   # sensitivity to a poor local optimum.
@@ -64,14 +62,13 @@ gmm:
   bootstrap_replicates: 1000
 
 classification:
-  # Use one explicit Nean/Deni reference pair for mutually exclusive calls.
-  # Adding another ancient individual therefore does not silently change calls.
-  neanderthal_reference: altai_nean
-  denisovan_reference: denisovan3
-  # Denisovan: D > 0.3 and N < 0.3.
+  # The maximum available rate in each group determines the class.
+  neanderthal_references: [altai_nean]
+  denisovan_references: [denisovan3, denisovan25]
+  # Denisovan: max(D) > 0.3 and max(N) < 0.3.
   denisovan_gt: 0.3
   neanderthal_lt_for_denisovan: 0.3
-  # Neanderthal: N > 0.6 and D < 0.4.
+  # Neanderthal: max(N) > 0.6 and max(D) < 0.4.
   neanderthal_gt: 0.6
   denisovan_lt_for_neanderthal: 0.4
   # Segments not classified as Neanderthal or Denisovan are ambiguous.

@@ -31,6 +31,9 @@ class GMMTests(unittest.TestCase):
             self.assertEqual(result['status'],'ok')
             self.assertEqual(result['selected_components'],'2')
             self.assertEqual(result['second_comparison'],'2_vs_3')
+            for field in ('aic_1','aic_2','aic_3','bic_1','bic_2','bic_3'):
+                self.assertNotEqual(result[field], 'NA')
+                self.assertTrue(float(result[field]) == float(result[field]))
             self.assertEqual(len(read(s.output.components)),2)
             self.assertGreater(Path(s.output.plot).stat().st_size,1000)
             write(source,['deni_match_rate'],[])

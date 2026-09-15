@@ -2,6 +2,6 @@
 rule contour:
     input: table='tables/{population}.wide.tsv', script=str(Path(ROOT) / 'workflow/scripts/plot_contour.R')
     output: 'plots/{population}.{pair}.png'
-    params: stage='contour', pairs=C['plots']['contour_pairs'], code=CODE
+    params: stage='contour', pairs=C['plots']['contour_pairs'], code=SIG['contour']
     log: 'logs/{population}/contour.{pair}.log'
     script: TASK

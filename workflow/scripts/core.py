@@ -147,27 +147,77 @@ def rate(row, rid):
 
 
 def classify(row, cfg):
-    """Assign mutually exclusive Nean/Deni labels; every remainder is ambiguous."""
-    n, d = rate(row, cfg['neanderthal_reference']), rate(row, cfg['denisovan_reference'])
-    if n is None or d is None:
+    """Assign a class using the maximum available rate in each archaic group."""
+    nean_rates = [rate(row, rid) for rid in cfg['neanderthal_references']]
+    deni_rates = [rate(row, rid) for rid in cfg['denisovan_references']]
+    nean_rates = [v for v in nean_rates if v is not None]
+    deni_rates = [v for v in deni_rates if v is not None]
+    if not nean_rates or not deni_rates:
         return 'ambiguous'
-    nean = n > cfg['neanderthal_gt'] and d < cfg['denisovan_lt_for_neanderthal']
-    deni = d > cfg['denisovan_gt'] and n < cfg['neanderthal_lt_for_denisovan']
-    if nean:
+    max_nean, max_deni = max(nean_rates), max(deni_rates)
+    is_nean = (max_nean > cfg['neanderthal_gt'] and
+               max_deni < cfg['denisovan_lt_for_neanderthal'])
+    is_deni = (max_deni > cfg['denisovan_gt'] and
+               max_nean < cfg['neanderthal_lt_for_denisovan'])
+    if is_nean:
         return 'neanderthal'
-    if deni:
+    if is_deni:
         return 'denisovan'
     return 'ambiguous'
 
 
 def gmm_pass(row, cfg):
-    """Apply the configurable pre_data-style allele and match-rate filters."""
+    """Apply group-level GMM eligibility using only callable references."""
     nr, dr = cfg['neanderthal_references'], cfg['denisovan_references']
-    required = set(nr + dr + cfg['target_references'])
-    if any(int(row[f'{r}_callable']) < cfg['min_callable'] or rate(row, r) is None for r in required):
+    nean = [rate(row, r) for r in nr
+            if int(row[f'{r}_callable']) >= cfg['min_callable'] and rate(row, r) is not None]
+    deni = [rate(row, r) for r in dr
+            if int(row[f'{r}_callable']) >= cfg['min_callable'] and rate(row, r) is not None]
+    if not nean or not deni:
         return False
-    return (all(rate(row, r) < cfg['neanderthal_rate_lt'] for r in nr)
-            and any(rate(row, r) > cfg['denisovan_rate_gt'] for r in dr))
+    return max(nean) < cfg['neanderthal_rate_lt'] and max(deni) > cfg['denisovan_rate_gt']
+
+
+def gmm_target_pass(row, cfg, target):
+    """Require one target reference to be callable for its own GMM input."""
+    if int(row[f'{target}_callable']) < cfg['min_callable'] or rate(row, target) is None:
+        return False
+    return gmm_pass(row, cfg)
+
+
+def classification_summary_rows(class_tables, wide_tables, populations):
+    """Return one count/coverage row for each population and class."""
+    output = []
+    for population in populations:
+        lengths = {(row['chromosome'], row['segment_id']): float(row['length_bp'])
+                   for row in wide_tables[population]}
+        for label in ('neanderthal', 'denisovan', 'ambiguous'):
+            selected = [row for row in class_tables[population]
+                        if row['archaic_class'] == label]
+            output.append({'population': population, 'archaic_class': label,
+                           'n_segments': len(selected),
+                           'genome_coverage_mb':
+                           sum(lengths[(row['chromosome'], row['segment_id'])]
+                               for row in selected) / 1_000_000})
+    return output
+
+
+def individual_summary_rows(call_tables, sample_rows, populations):
+    """Summarize haplotype tract lengths and unique target individuals."""
+    target_counts = {population: sum(r['role'] == 'target' and r['population'] == population
+                                    for r in sample_rows)
+                     for population in populations}
+    output = []
+    for population in populations:
+        rows = call_tables[population]
+        for label in ('neanderthal', 'denisovan', 'ambiguous'):
+            selected = [r for r in rows if r['archaic_class'] == label]
+            output.append({'population': population, 'archaic_class': label,
+                           'per_individual_introgressed_mb':
+                           sum(float(r['length_bp']) for r in selected) /
+                           target_counts[population] / 1_000_000,
+                           'n_introgressed_individuals': len({r['sample_id'] for r in selected})})
+    return output
 
 
 def runs(markers, minimum=2):

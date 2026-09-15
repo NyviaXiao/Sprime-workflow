@@ -46,9 +46,12 @@ map_arch 按染色体坐标分配大量内存，须按实际服务器调整 `res
 内部保存完整精度，旧 R 脚本四舍五入到四位，因此展示精度可能不同。
 群体 pooled rate 为分子之和/分母之和（按片段记录累计，非全基因组去重估计）。
 
-GMM 预处理从 `SCORE > 150000` 的位点重新计数。所有指定参考（含建模目标）
-callable 数至少 30，全部指定 Nean rate < 0.3，至少一个指定 Deni rate > 0.3。
-单 Deni 可只配置一个参考；双 Deni 使用同一筛选集分别建模。
+GMM 预处理从 `SCORE > 150000` 的位点重新计数。每个 reference 只有在
+callable 数至少 30 时才参与该片段的阈值判断；每个 Nean/Deni 组至少要有一个
+合格 reference。判断使用合格 reference 的最大 rate：max(Nean) < 0.3 且
+max(Deni) > 0.3。每个 target Denisovan 都使用自己的 callable 合格片段单独建模，
+不对多个 target 求平均或合并。AIC/BIC 输出在 `gmm/model_selection.tsv` 中，仅供参考，
+不参与现有 LRT、p-value 或 selected_components 决策。
 **不进行片段长度筛选**，`length_bp` 仅为结果描述字段。
 基础匹配表、分类表和 GMM 筛选表分别保留，以便核查筛选对结果的影响。
 
@@ -61,8 +64,8 @@ Bonferroni 第一阶段按“群体数 × 建模参考数”，第二阶段按�
 GMM 成分数是分布模型的结果，不能单独当作已证实的历史渗入事件次数。
 少于 10 个片段或少于 3 个不同数值时输出 `insufficient_data`，不伪造 p 值。
 
-分类使用配置中明确指定的 Nean/Deni 参考对，因此添加参考不会静默改变分类。
-Nean: N > 0.6 且 D < 0.4；Deni: D > 0.3 且 N < 0.3；
+分类使用配置中的 Nean/Deni reference 列表，并分别取可用 rate 的最大值。
+Nean: max(N) > 0.6 且 max(D) < 0.4；Deni: max(D) > 0.3 且 max(N) < 0.3；
 所有未命中这两类的片段（包括 match rate 缺失）归为 ambiguous。
 
 个体 call 直接按 `(CHROM, POS, REF, ALT)` 对齐 VCF 与 score，在每个 SPrime 片段内，
@@ -85,13 +88,15 @@ results/run001/
   tables/segment_match_rates.wide.tsv.gz
   tables/segment_match_rates.long.tsv.gz
   tables/population_match_summary.tsv
+  tables/classification_summary.tsv
   classification/{population}.tsv
-  gmm/input/{population}.tsv
+  gmm/input/{population}/{reference}.tsv
   gmm/model_selection.tsv
   gmm/components.tsv
   gmm/plots/{population}.{reference}.png
   individual_calls/all_individual_calls.tsv.gz
   individual_calls/by_population/{population}/{class}.tsv.gz
+  individual_calls/individual_summary.tsv
   plots/{population}.{reference1}__{reference2}.png
   logs/
   work/
@@ -135,6 +140,9 @@ Sprime-workflow-main/
 ```
 
 `rules/` 按分析阶段拆分依赖，`scripts/` 保存实现；`plot_contour.R` 保留 MASS::kde2d 绘图。
+Snakemake 的代码签名按 stage 计算：入口会关闭同一 dispatcher 脚本的整体 code trigger，
+改由 stage-local `params.code` 追踪；因此只修改 GMM fitting 不会使上游匹配或 classification
+失效，classification 改变会使 individual 分支失效，但不会触发 GMM。
 原 `score_summary.r/pre_data.r/selectGene2.py` 的重复处理已合并；原文件副本在 `legacy/`。
 `tools/map_arch` 保留提供的 C 程序接口，并修复 VCF 表头读取、未初始化值及缺失 GT 处理；
 Linux 上须重新编译。由于修复会影响异常/缺失输入的行为，应与旧结果逐项比较。
