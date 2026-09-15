@@ -1,0 +1,53 @@
+from pathlib import Path
+import hashlib
+
+# Short aliases are shared by all rule files included below.
+C = config
+P = C['populations']
+CH = C['chromosomes']
+R = {r['id']: r for r in C['archaic_references']}
+ROOT = C['project_root']
+TASK = str(Path(ROOT) / 'workflow/scripts/task.py')
+# Make source-code changes part of each rule signature so Snakemake notices
+# logic updates even when biological inputs and output filenames are unchanged.
+CODE = hashlib.sha256(b''.join(p.read_bytes() for p in sorted((Path(ROOT) / 'workflow/scripts').glob('*.py')))).hexdigest()
+PAIRS = [f'{a}__{b}' for a,b in C['plots']['contour_pairs']]
+
+# Config-derived constraints prevent accidental wildcard matches across path
+# components (for example, a reference ID being interpreted as a population).
+wildcard_constraints:
+    population='|'.join(P), chrom='|'.join(CH), ref='|'.join(R)
+
+# Default target: final tables, classifications, plots and enabled analyses.
+rule all:
+    input:
+        'tables/segment_match_rates.wide.tsv.gz',
+        'tables/segment_match_rates.long.tsv.gz',
+        'tables/population_match_summary.tsv',
+        expand('classification/{population}.tsv', population=P),
+        expand('plots/{population}.{pair}.png', population=P, pair=PAIRS),
+        ['gmm/model_selection.tsv', 'gmm/components.tsv'] if C['gmm']['enabled'] else [],
+        ['individual_calls/all_individual_calls.tsv.gz'] if C['individual']['enabled'] else []
+
+# Convenience targets used by ``run.py --target ...``.
+rule matches:
+    input: 'tables/segment_match_rates.wide.tsv.gz'
+
+rule gmm:
+    input: ['gmm/model_selection.tsv', 'gmm/components.tsv'] if C['gmm']['enabled'] else []
+
+rule individual:
+    input: ['individual_calls/all_individual_calls.tsv.gz'] if C['individual']['enabled'] else []
+
+# Rule files follow the biological analysis order. Snakemake still derives
+# execution order from file dependencies rather than include order.
+include: "rules/validate.smk"
+include: "rules/prepare_vcf.smk"
+include: "rules/sprime.smk"
+include: "rules/archaic_match.smk"
+include: "rules/summarize.smk"
+include: "rules/classify.smk"
+include: "rules/gmm.smk"
+include: "rules/individual_calls.smk"
+include: "rules/report.smk"
+include: "rules/tools.smk"

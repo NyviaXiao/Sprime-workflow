@@ -1,0 +1,18 @@
+name: sprime-workflow
+channels: [conda-forge, bioconda]
+dependencies:
+  - python=3.11
+  - snakemake-minimal=8.30
+  - bcftools=1.21
+  - openjdk=17
+  - pysam=0.22
+  - numpy=1.26
+  - scipy=1.14
+  - scikit-learn=1.5
+  - matplotlib=3.9
+  - pyyaml=6
+  - r-base=4.4
+  - r-mass
+  - make
+  - c-compiler
+  - zlib

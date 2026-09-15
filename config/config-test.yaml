@@ -1,0 +1,64 @@
+# Paths are relative to this configuration file. Use absolute paths on your server.
+genome_build: GRCh37
+vcf: /public/group_data_2023/xiaoyn/Data_1KGP/chrom_{chrom}.vcf.gz
+samples: samples-test.tsv
+outdir: ../results/run001
+chromosomes: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22']
+genetic_map: /public/group_data_2023/xiaoyn/Data_map/GRCh37map/plink.all.GRch37.map
+sprime_jar: ../tools/sprime.jar
+map_arch: ../tools/map_arch/map_arch
+sprime_minscore: 150000
+summary_min_callable: 10
+archaic_references:
+  - id: altai_nean
+    group: neanderthal
+    tag: AltaiNean
+    vcf: /public/group_data_2023/xiaoyn/Data_Nean/Data_Altai_16/gz/chr{chrom}.vcf.gz
+    mask: /public/group_data_2023/xiaoyn/Data_Nean/Data_Altai_16/FilterBed/chr{chrom}_mask.bed.gz
+  - id: denisovan3
+    group: denisovan
+    tag: Denisovan3
+    vcf: /public/group_data_2023/xiaoyn/Data_Denisovan/Denisovan/chr_{chrom}.vcf.gz
+    mask: /public/group_data_2023/xiaoyn/Data_Denisovan/Denisovan/FilterBed/chr{chrom}_mask.bed.gz
+  - id: denisovan25
+    group: denisovan
+    tag: Denisovan25
+    vcf: /public/group_data_2023/wangc/Data/Archaic_data/denisova25/chr{chrom}.Den25.L35MQ25.B30.map35_100.vcf.gz
+    mask: /public/group_data_2023/wangc/Data/Archaic_data/denisova25/FilterBed/Denisova25.chr{chrom}.hg19.L35MQ25.map35_100.GCcov.noSimpleRepeat.noIndel.min10x.bed.gz
+gmm:
+  enabled: true
+  target_references: [denisovan3, denisovan25]
+  neanderthal_references: [altai_nean]
+  denisovan_references: [denisovan3, denisovan25]
+  min_callable: 30
+  score_gt: 150000
+  neanderthal_rate_lt: 0.3
+  denisovan_rate_gt: 0.3
+  # All specified references must have >= min_callable;
+  # all Nean rates < threshold, ANY Deni rate > threshold.
+  min_segments: 10
+  seed: 0
+  n_init: 10
+  alpha: 0.05
+  method: legacy_chi_square
+  bootstrap_replicates: 1000
+classification:
+  # Explicit reference pair: adding references does not silently change calls.
+  neanderthal_reference: altai_nean
+  denisovan_reference: denisovan3
+  denisovan_gt: 0.3
+  neanderthal_lt_for_denisovan: 0.3
+  neanderthal_gt: 0.6
+  denisovan_lt_for_neanderthal: 0.4
+  # Provisional, configurable rule; original ambiguous file generator was absent.
+  ambiguous_min_each: 0.3
+individual:
+  enabled: true
+  min_markers: 2
+  # Missing genotype breaks a run; unphased nonmissing GT is an error.
+plots:
+  contour_pairs: [[denisovan3, denisovan25]]
+resources:
+  sprime_mem_mb: 8000
+  map_arch_mem_mb: 16000
+  individual_mem_mb: 8000

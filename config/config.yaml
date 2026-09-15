@@ -1,0 +1,93 @@
+# Example Linux configuration. Relative paths are resolved from this file;
+# absolute server paths are recommended for large external reference datasets.
+genome_build: GRCh37
+
+# Modern cohort VCF. {chrom} is replaced with each value in chromosomes.
+# A single multi-chromosome VCF path is also accepted.
+vcf: /data/modern/chr{chrom}.vcf.gz
+samples: samples.tsv
+outdir: ../results/run001
+chromosomes: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22']
+
+# GRCh37 genetic map and analysis executables.
+genetic_map: /data/maps/plink.all.GRCh37.map
+sprime_jar: ../tools/sprime.jar
+map_arch: ../tools/map_arch/map_arch
+
+# Candidate-marker threshold passed directly to SPrime. Match rates below are
+# reported only when match + mismatch reaches summary_min_callable.
+sprime_minscore: 150000
+summary_min_callable: 10
+
+# Add any number of ancient individuals. id becomes output paths/column names;
+# tag becomes the appended map_arch column. Each VCF/mask must be per chromosome.
+archaic_references:
+  - id: altai_nean
+    group: neanderthal
+    tag: AltaiNean
+    vcf: /data/altai_nean/chr{chrom}.vcf.gz
+    mask: /data/altai_nean/chr{chrom}.bed.gz
+  - id: denisovan3
+    group: denisovan
+    tag: Denisovan3
+    vcf: /data/denisovan3/chr{chrom}.vcf.gz
+    mask: /data/denisovan3/chr{chrom}.bed.gz
+  - id: denisovan25
+    group: denisovan
+    tag: Denisovan25
+    vcf: /data/denisovan25/chr{chrom}.vcf.gz
+    mask: /data/denisovan25/chr{chrom}.bed.gz
+gmm:
+  enabled: true
+  # Fit a separate GMM to the match-rate column of each target reference.
+  target_references: [denisovan3, denisovan25]
+  # These lists define eligibility for the common GMM input segment set.
+  neanderthal_references: [altai_nean]
+  denisovan_references: [denisovan3, denisovan25]
+  # Reproduce pre_data.r: first retain marker rows with SCORE > score_gt,
+  # then require callable count and Nean/Deni rate conditions per segment.
+  min_callable: 30
+  score_gt: 150000
+  neanderthal_rate_lt: 0.3
+  denisovan_rate_gt: 0.3
+  # All specified references must have >= min_callable;
+  # all Nean rates < threshold, ANY Deni rate > threshold.
+  min_segments: 10
+  # Fixed seed and repeated starts make GMM output reproducible and reduce
+  # sensitivity to a poor local optimum.
+  seed: 0
+  n_init: 10
+  alpha: 0.05
+  # legacy_chi_square reproduces the original approach. The alternative is
+  # parametric_bootstrap, controlled by bootstrap_replicates.
+  method: legacy_chi_square
+  bootstrap_replicates: 1000
+
+classification:
+  # Use one explicit Nean/Deni reference pair for mutually exclusive calls.
+  # Adding another ancient individual therefore does not silently change calls.
+  neanderthal_reference: altai_nean
+  denisovan_reference: denisovan3
+  # Denisovan: D > 0.3 and N < 0.3.
+  denisovan_gt: 0.3
+  neanderthal_lt_for_denisovan: 0.3
+  # Neanderthal: N > 0.6 and D < 0.4.
+  neanderthal_gt: 0.6
+  denisovan_lt_for_neanderthal: 0.4
+  # Segments not classified as Neanderthal or Denisovan are ambiguous.
+
+individual:
+  enabled: true
+  # Minimum adjacent SPrime markers carried by one phased haplotype.
+  min_markers: 2
+  # Missing genotype breaks a run; unphased nonmissing GT is an error.
+
+plots:
+  # Each pair produces one contour plot per population.
+  contour_pairs: [[denisovan3, denisovan25]]
+
+resources:
+  # Snakemake scheduling estimates in MB; tune for the Linux server.
+  sprime_mem_mb: 8000
+  map_arch_mem_mb: 16000
+  individual_mem_mb: 8000
