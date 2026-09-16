@@ -17,4 +17,10 @@ class AffinityTests(unittest.TestCase):
             with gzip.open(out,'rt',newline='') as f: row=next(csv.DictReader(f,delimiter='\t'))
             self.assertEqual(row['match'],'3'); self.assertEqual(row['match_rate'],'.75'); self.assertEqual(row['archaic_class'],'neanderthal')
 
+    def test_affinity_landscape_uses_group_specific_input_vectors(self):
+        rules = (ROOT/'workflow/rules/new_modules.smk').read_text()
+        script = (ROOT/'workflow/scripts/plot_affinity_landscape.R').read_text()
+        self.assertIn('nean_aff=', rules); self.assertIn('deni_aff=', rules)
+        self.assertIn('input[["nean_aff"]]', script); self.assertIn('input[["deni_aff"]]', script)
+
 if __name__ == '__main__': unittest.main()

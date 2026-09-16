@@ -125,9 +125,26 @@ class SignatureTests(unittest.TestCase):
         project = copied_project()
         try:
             sig = signatures(project)
-            self.assertEqual(len(sig), 25)
+            self.assertEqual(len(sig), 27)
         finally:
             shutil.rmtree(project)
+
+    def test_downstream_script_signatures_are_isolated(self):
+        cases = [('run_adaptive.py', 'adaptive_chr', 'adaptive_collect'),
+                 ('collect_adaptive.py', 'adaptive_collect', 'adaptive_chr'),
+                 ('build_report.py', 'report', 'adaptive_chr')]
+        for filename, changed, unaffected in cases:
+            with self.subTest(filename=filename):
+                project = copied_project()
+                try:
+                    before = signatures(project)
+                    path = project / 'workflow/scripts' / filename
+                    path.write_text(path.read_text(encoding='utf-8') + '\n# signature mutation\n', encoding='utf-8')
+                    after = signatures(project)
+                    self.assertNotEqual(after[changed], before[changed])
+                    self.assertEqual(after[unaffected], before[unaffected])
+                finally:
+                    shutil.rmtree(project)
 
 
 if __name__ == '__main__':

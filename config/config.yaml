@@ -98,11 +98,11 @@ adaptive:
   min_callable_sites: 10
   neanderthal_match_threshold: 0.50
   denisovan_match_threshold: 0.40
-  top_regions: 2
 
 report:
   enabled: true
-  # Exactly one cross-group pair is shown in the HTML report.
+  # Exactly one cross-group pair for one configured population is shown.
+  contour_population: CHS
   contour_pair: [altai_nean, denisovan3]
 
 resources:

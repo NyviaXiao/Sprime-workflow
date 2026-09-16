@@ -152,7 +152,9 @@ Sprime-workflow-main/
       plot_contour.R
       build_affinity_tables.py
       plot_landscape.R
+      plot_affinity_landscape.R
       run_adaptive.py
+      collect_adaptive.py
       build_provenance.py
       build_report.py
   tools/                       # JAR、map_arch 源码及编译文件
