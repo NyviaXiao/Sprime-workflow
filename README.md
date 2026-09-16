@@ -115,6 +115,9 @@ results/run001/
 
 wide 表每个古人包含 matched/mismatch/callable/notcomp/match_rate；long 表每行一个片段-古人。
 个体表包含 population/sample_id/haplotype/chromosome/start/end/length_bp/marker_count/segment_id/archaic_class。
+`adaptive/segment_summary.tsv` 与 `adaptive/top2_candidates.tsv` 的
+`candidate_start/candidate_end` 使用 BED-style 0-based half-open 坐标；其余既有
+segment summary 表保持原有的 1-based inclusive 坐标定义。
 provenance 精简为配置和 run_info：工具版本、小型关键文件 SHA256、输入路径/大小/修改时间。
 QC 会扫描古人 VCF/mask，检查单染色体限制；完整验证耗时随参考文件大小增加。
 

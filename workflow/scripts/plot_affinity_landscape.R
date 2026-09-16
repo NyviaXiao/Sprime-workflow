@@ -3,7 +3,15 @@
 # affinity file.
 library(karyoploteR)
 
-chromosomes <- paste0("chr", as.character(snakemake@params[["chromosomes"]]))
+normalize_chr <- function(x) {
+  x <- as.character(x)
+  ifelse(grepl("^chr", x), x, paste0("chr", x))
+}
+if (snakemake@params[["genome_build"]] != "GRCh37") {
+  stop("Landscape plotting currently supports genome_build: GRCh37 only")
+}
+
+chromosomes <- normalize_chr(snakemake@params[["chromosomes"]])
 palette <- colorRampPalette(c("#ffffcc", "#41b6c4", "#0c2c84"))(101)
 
 draw_group <- function(output, paths, refs, wanted) {
@@ -15,7 +23,7 @@ draw_group <- function(output, paths, refs, wanted) {
     rows <- read.delim(paths[[i]], check.names=FALSE, na.strings="NA")
     rows <- rows[rows$archaic_class == wanted, ]
     if (!nrow(rows)) next
-    rows$chr <- ifelse(grepl("^chr", rows$chromosome), rows$chromosome, paste0("chr", rows$chromosome))
+    rows$chr <- normalize_chr(rows$chromosome)
     rows <- rows[rows$chr %in% chromosomes & is.finite(rows$match_rate), ]
     if (!nrow(rows)) next
     idx <- pmax(1, pmin(101, 1 + round(as.numeric(rows$match_rate) * 100)))

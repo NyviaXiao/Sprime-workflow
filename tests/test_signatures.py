@@ -132,7 +132,10 @@ class SignatureTests(unittest.TestCase):
     def test_downstream_script_signatures_are_isolated(self):
         cases = [('run_adaptive.py', 'adaptive_chr', 'adaptive_collect'),
                  ('collect_adaptive.py', 'adaptive_collect', 'adaptive_chr'),
-                 ('build_report.py', 'report', 'adaptive_chr')]
+                 ('plot_landscape.R', 'introgression_landscape', 'affinity_landscape'),
+                 ('plot_affinity_landscape.R', 'affinity_landscape', 'introgression_landscape'),
+                 ('build_report.py', 'report', 'adaptive_chr'),
+                 ('build_provenance.py', 'provenance', 'report')]
         for filename, changed, unaffected in cases:
             with self.subTest(filename=filename):
                 project = copied_project()

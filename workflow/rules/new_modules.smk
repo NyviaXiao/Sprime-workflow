@@ -8,8 +8,8 @@ rule affinity_table:
 
 rule introgression_landscape:
     input: classification='classification/{population}.tsv'
-    output: 'plots/landscape/{population}.introgression_landscape.png'
-    params: chromosomes=CH, code=SIG['introgression_landscape']
+    output: introgression='plots/landscape/{population}.introgression_landscape.png'
+    params: chromosomes=CH, genome_build=C['genome_build'], code=SIG['introgression_landscape']
     script: str(Path(ROOT) / 'workflow/scripts/plot_landscape.R')
 
 rule affinity_landscape:
@@ -20,7 +20,7 @@ rule affinity_landscape:
         neanderthal='plots/landscape/{population}.neanderthal_affinity_landscape.png',
         denisovan='plots/landscape/{population}.denisovan_affinity_landscape.png'
     params:
-        chromosomes=CH, neanderthal_refs=NEAN, denisovan_refs=DENI,
+        chromosomes=CH, genome_build=C['genome_build'], neanderthal_refs=NEAN, denisovan_refs=DENI,
         code=SIG['affinity_landscape']
     script: str(Path(ROOT) / 'workflow/scripts/plot_affinity_landscape.R')
 
@@ -49,11 +49,11 @@ rule collect_adaptive:
     script: str(Path(ROOT) / 'workflow/scripts/collect_adaptive.py')
 
 rule provenance_base:
-    input: config='resolved_config.json'
+    input: config='resolved_config.json', validation='qc/validation.tsv', run_info='run_info.json'
     output:
         run='provenance/run_manifest.json', resolved='provenance/resolved_config.json',
         software='provenance/software_versions.tsv', inputs='provenance/input_manifest.tsv'
-    params: mode='base', root=ROOT, code=SIG['provenance']
+    params: mode='base', git_commit=CURRENT_GIT_COMMIT, code=SIG['provenance']
     script: str(Path(ROOT) / 'workflow/scripts/build_provenance.py')
 
 rule report:

@@ -98,16 +98,19 @@ def _write(path, fields, rows):
         writer.writeheader(); writer.writerows(rows)
 
 
-def _alt_frequencies(vcf_path, chromosome, samples):
+def _alt_frequencies(vcf_path, chromosome, samples, wanted_keys):
     import pysam
     values = {}
     with pysam.VariantFile(vcf_path) as vcf:
         for record in vcf.fetch(chromosome):
             if not record.alts or len(record.alts) != 1:
                 continue
+            key = (record.pos, record.ref, record.alts[0])
+            if key not in wanted_keys:
+                continue
             alleles = [allele for sample in samples for allele in (record.samples[sample].get('GT') or ()) if allele is not None]
             if alleles:
-                values[(record.pos, record.ref, record.alts[0])] = sum(a == 1 for a in alleles) / len(alleles)
+                values[key] = sum(a == 1 for a in alleles) / len(alleles)
     return values
 
 
@@ -120,9 +123,11 @@ if 'snakemake' in globals():
     for path, ref in zip(snakemake.input.mscore, snakemake.params.references):
         tag = snakemake.params.tags[ref]
         states[ref] = {(int(row['POS']), row['REF'], row['ALT']): row.get(tag, 'notcomp') for row in _read_table(path)}
+    scores = list(_read_score(snakemake.input.score))
+    wanted_keys = {(int(row['POS']), row['REF'], row['ALT']) for row in scores}
     marker_rows, core_rows, segment_rows = build_chromosome_rows(
-        population, chromosome, list(_read_score(snakemake.input.score)),
-        _alt_frequencies(snakemake.input.vcf, chromosome, samples), states, cfg,
+        population, chromosome, scores,
+        _alt_frequencies(snakemake.input.vcf, chromosome, samples, wanted_keys), states, cfg,
         snakemake.params.references, snakemake.params.groups,
         snakemake.params.neanderthal_refs, snakemake.params.denisovan_refs)
     marker_fields = list(marker_rows[0]) if marker_rows else ['population','chromosome','position','segment_id','sprime_allele','introgressed_AF']

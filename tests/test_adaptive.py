@@ -2,6 +2,8 @@ import csv
 import importlib.util
 import pathlib
 import tempfile
+import sys
+import types
 import unittest
 
 ROOT = pathlib.Path(__file__).parents[1]
@@ -49,6 +51,25 @@ class AdaptiveTests(unittest.TestCase):
         self.assertEqual([row['segment_id'] for row in collector.rank_top2(rows)], ['good'])
         overlap = collector.shared_intervals([{'population':'P1','chromosome':'1','candidate_start':0,'candidate_end':100}, {'population':'P2','chromosome':'1','candidate_start':20,'candidate_end':80}, {'population':'P3','chromosome':'1','candidate_start':90,'candidate_end':120}])
         self.assertEqual([(row['start'], row['end'], row['populations']) for row in overlap], [(20,80,'P1,P2'), (90,100,'P1,P3')])
+
+    def test_alt_frequency_keeps_only_sprime_keys(self):
+        class Record:
+            def __init__(self, pos):
+                self.pos, self.ref, self.alts = pos, 'A', ('G',)
+                self.samples = {'sample': {'GT': (0, 1)}}
+        class VariantFile:
+            def __init__(self, path): pass
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def fetch(self, chrom): return [Record(10), Record(20)]
+        original = sys.modules.get('pysam')
+        sys.modules['pysam'] = types.SimpleNamespace(VariantFile=VariantFile)
+        try:
+            got = adaptive._alt_frequencies('unused.vcf', '1', ['sample'], {(10, 'A', 'G')})
+        finally:
+            if original is None: del sys.modules['pysam']
+            else: sys.modules['pysam'] = original
+        self.assertEqual(set(got), {(10, 'A', 'G')})
 
 
 if __name__ == '__main__': unittest.main()

@@ -11,6 +11,7 @@ R = {r['id']: r for r in C['archaic_references']}
 ROOT = C['project_root']
 TASK = str(Path(ROOT) / 'workflow/scripts/task.py')
 SCRIPT_DIR = Path(ROOT) / 'workflow/scripts'
+CURRENT_GIT_COMMIT = C['git_commit']
 
 
 def _source_nodes(path):
@@ -161,7 +162,10 @@ rule all:
         ['gmm/model_selection.tsv', 'gmm/components.tsv'] if C['gmm']['enabled'] else [],
         ['individual_calls/all_individual_calls.tsv.gz', 'individual_calls/individual_summary.tsv'] if C['individual']['enabled'] else [],
         ['adaptive/variants.tsv.gz','adaptive/core_variants.tsv.gz','adaptive/segment_summary.tsv','adaptive/top2_candidates.tsv','adaptive/shared_top2_regions.tsv'] if C['adaptive']['enabled'] else [],
-        ['provenance/output_manifest.tsv', 'report/report.html'] if C['report']['enabled'] else []
+        ['provenance/run_manifest.json', 'provenance/resolved_config.json',
+         'provenance/software_versions.tsv', 'provenance/input_manifest.tsv',
+         'provenance/output_manifest.tsv'],
+        ['report/report.html'] if C['report']['enabled'] else []
 
 # Convenience targets used by ``run.py --target ...``.
 rule matches:
@@ -186,4 +190,3 @@ include: "rules/individual_calls.smk"
 include: "rules/report.smk"
 include: "rules/new_modules.smk"
 include: "rules/tools.smk"
-

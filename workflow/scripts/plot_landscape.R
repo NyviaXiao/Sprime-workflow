@@ -1,15 +1,22 @@
 # Draw one chromosome-ideogram landscape from final classification rows.
 library(karyoploteR)
 
+normalize_chr <- function(x) {
+  x <- as.character(x)
+  ifelse(grepl("^chr", x), x, paste0("chr", x))
+}
+if (snakemake@params[["genome_build"]] != "GRCh37") {
+  stop("Landscape plotting currently supports genome_build: GRCh37 only")
+}
+
 classes <- read.delim(snakemake@input[["classification"]], check.names=FALSE,
                       na.strings="NA")
-chromosomes <- paste0("chr", as.character(snakemake@params[["chromosomes"]]))
-classes$chr <- ifelse(grepl("^chr", classes$chromosome), classes$chromosome,
-                      paste0("chr", classes$chromosome))
+chromosomes <- normalize_chr(snakemake@params[["chromosomes"]])
+classes$chr <- normalize_chr(classes$chromosome)
 classes <- classes[classes$chr %in% chromosomes, ]
 colors <- c(neanderthal="#2c7bb6", denisovan="#d7191c", ambiguous="#999999")
 
-png(snakemake@output[[0]], width=1800, height=1000, res=180)
+png(snakemake@output[["introgression"]], width=1800, height=1000, res=180)
 kp <- plotKaryotype(genome="hg19", chromosomes=chromosomes, plot.type=1,
                     main=paste(snakemake@wildcards[["population"]], "introgression landscape"))
 for (label in names(colors)) {
