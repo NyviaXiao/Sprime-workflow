@@ -97,7 +97,18 @@ results/run001/
   individual_calls/all_individual_calls.tsv.gz
   individual_calls/by_population/{population}/{class}.tsv.gz
   individual_calls/individual_summary.tsv
-  plots/{population}.{reference1}__{reference2}.png
+  plots/landscape/{population}.introgression_landscape.png
+  plots/landscape/{population}.neanderthal_affinity_landscape.png
+  plots/landscape/{population}.denisovan_affinity_landscape.png
+  affinity/{population}/{reference}.tsv.gz
+  plots/contour/{population}.{reference1}__{reference2}.png
+  adaptive/{variants,core_variants}.tsv.gz
+  adaptive/segment_summary.tsv
+  adaptive/top2_candidates.tsv
+  adaptive/shared_top2_regions.tsv
+  provenance/{run_manifest,resolved_config}.json
+  provenance/{software_versions,input_manifest,output_manifest}.tsv
+  report/report.html
   logs/
   work/
 ```
@@ -106,6 +117,10 @@ wide 表每个古人包含 matched/mismatch/callable/notcomp/match_rate；long �
 个体表包含 population/sample_id/haplotype/chromosome/start/end/length_bp/marker_count/segment_id/archaic_class。
 provenance 精简为配置和 run_info：工具版本、小型关键文件 SHA256、输入路径/大小/修改时间。
 QC 会扫描古人 VCF/mask，检查单染色体限制；完整验证耗时随参考文件大小增加。
+
+landscape、affinity、adaptive、provenance 和 report 是独立 downstream 分支，
+直接消费已有结果；它们不会重新计算 SPrime 或 map_arch。Contour 支持
+`all_pairs`（全部古人组合）和 `explicit_pairs`（仅配置组合）。
 
 ## 实现与验证范围
 
@@ -126,6 +141,7 @@ Sprime-workflow-main/
       gmm.smk
       individual_calls.smk
       report.smk
+      new_modules.smk
       tools.smk
     scripts/
       task.py                  # 公共执行入口和日志
@@ -134,6 +150,11 @@ Sprime-workflow-main/
       call_individual_tracts.py
       run_gmm.py
       plot_contour.R
+      build_affinity_tables.py
+      plot_landscape.R
+      run_adaptive.py
+      build_provenance.py
+      build_report.py
   tools/                       # JAR、map_arch 源码及编译文件
   tests/
   legacy/                      # 原始分析脚本的只读参考副本

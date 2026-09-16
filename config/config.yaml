@@ -80,8 +80,30 @@ individual:
   # Missing genotype breaks a run; unphased nonmissing GT is an error.
 
 plots:
-  # Each pair produces one contour plot per population.
-  contour_pairs: [[denisovan3, denisovan25]]
+  contour:
+    enabled: true
+    mode: all_pairs
+    pairs: []
+
+landscape:
+  enabled: true
+
+affinity:
+  enabled: true
+
+adaptive:
+  enabled: true
+  min_allele_frequency: 0.30
+  max_frequency_drop: 0.20
+  min_callable_sites: 10
+  neanderthal_match_threshold: 0.50
+  denisovan_match_threshold: 0.40
+  top_regions: 2
+
+report:
+  enabled: true
+  # Exactly one cross-group pair is shown in the HTML report.
+  contour_pair: [altai_nean, denisovan3]
 
 resources:
   # Snakemake scheduling estimates in MB; tune for the Linux server.

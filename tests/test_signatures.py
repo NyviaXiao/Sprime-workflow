@@ -125,7 +125,7 @@ class SignatureTests(unittest.TestCase):
         project = copied_project()
         try:
             sig = signatures(project)
-            self.assertEqual(len(sig), 20)
+            self.assertEqual(len(sig), 25)
         finally:
             shutil.rmtree(project)
 

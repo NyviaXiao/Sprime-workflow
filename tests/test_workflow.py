@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from itertools import combinations
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,9 +13,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-@unittest.skipUnless(importlib.util.find_spec('snakemake'), 'Snakemake is not installed')
 class WorkflowTests(unittest.TestCase):
+    def test_contour_pair_modes(self):
+        refs = ['n1', 'n2', 'd1', 'd2', 'd3']
+        self.assertEqual(len(list(combinations(refs, 2))), 10)
+        explicit = [('n1', 'd1'), ('d1', 'd2')]
+        self.assertEqual(explicit, [('n1', 'd1'), ('d1', 'd2')])
+
     def test_full_dag_with_placeholder_inputs(self):
+        if importlib.util.find_spec('snakemake') is None:
+            self.skipTest('Snakemake is not installed')
         from snakemake.api import SnakemakeApi
         from snakemake.settings.types import ResourceSettings, ConfigSettings, DAGSettings, StorageSettings
         from run import resolve_config
@@ -40,7 +48,9 @@ class WorkflowTests(unittest.TestCase):
                         wf.dag(DAGSettings(targets={'all'})).printdag()
                     dag = output.getvalue()
                     for name in ('sprime','archaic_match','fit_gmm','individual_chr',
-                                 'classification_summary','individual_summary','contour'):
+                                 'classification_summary','individual_summary','contour',
+                                 'affinity_table','landscape','adaptive_chr',
+                                 'provenance_base','report'):
                         self.assertIn(name,dag)
 
 

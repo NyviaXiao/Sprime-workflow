@@ -1,6 +1,7 @@
 from pathlib import Path
 import ast
 import hashlib
+from itertools import combinations
 
 # Short aliases are shared by all rule files included below.
 C = config
@@ -108,13 +109,35 @@ SIG = {
     'individual_summary': _signature('individual_summary', ['op', 'CALLS', 'read', 'write', 'individual_summary_rows']),
     'contour': _signature('contour', extra=[SCRIPT_DIR / 'plot_contour.R']),
     'compile': _signature('compile'),
+    'affinity': hashlib.sha256(Path(SCRIPT_DIR / 'build_affinity_tables.py').read_bytes()).hexdigest(),
+    'landscape': hashlib.sha256(Path(SCRIPT_DIR / 'plot_landscape.R').read_bytes()).hexdigest(),
+    'adaptive': hashlib.sha256(Path(SCRIPT_DIR / 'run_adaptive.py').read_bytes()).hexdigest(),
+    'provenance': hashlib.sha256(Path(SCRIPT_DIR / 'build_provenance.py').read_bytes()).hexdigest(),
+    'report': hashlib.sha256(Path(SCRIPT_DIR / 'build_report.py').read_bytes()).hexdigest(),
 }
-PAIRS = [f'{a}__{b}' for a,b in C['plots']['contour_pairs']]
-
+CONTOUR = C['plots']['contour']
+PAIR_IDS = (list(combinations(R, 2)) if CONTOUR['mode'] == 'all_pairs' else [tuple(x) for x in CONTOUR['pairs']])
+PAIRS = [f'{a}__{b}' for a,b in PAIR_IDS] if CONTOUR['enabled'] else []
+NEAN = [r for r,v in R.items() if v['group'] == 'neanderthal']
+DENI = [r for r,v in R.items() if v['group'] == 'denisovan']
 # Config-derived constraints prevent accidental wildcard matches across path
 # components (for example, a reference ID being interpreted as a population).
 wildcard_constraints:
     population='|'.join(P), chrom='|'.join(CH), ref='|'.join(R)
+
+FINAL_ARTIFACTS = ['tables/segment_match_rates.wide.tsv.gz', 'tables/segment_match_rates.long.tsv.gz', 'tables/population_match_summary.tsv', 'tables/classification_summary.tsv']
+FINAL_ARTIFACTS += expand('classification/{population}.tsv', population=P)
+FINAL_ARTIFACTS += expand('plots/contour/{population}.{pair}.png', population=P, pair=PAIRS)
+if C['landscape']['enabled']:
+    FINAL_ARTIFACTS += expand('plots/landscape/{population}.{kind}.png', population=P, kind=['introgression_landscape','neanderthal_affinity_landscape','denisovan_affinity_landscape'])
+if C['affinity']['enabled']:
+    FINAL_ARTIFACTS += expand('affinity/{population}/{ref}.tsv.gz', population=P, ref=list(R))
+if C['gmm']['enabled']:
+    FINAL_ARTIFACTS += ['gmm/model_selection.tsv','gmm/components.tsv']
+if C['individual']['enabled']:
+    FINAL_ARTIFACTS += ['individual_calls/all_individual_calls.tsv.gz','individual_calls/individual_summary.tsv']
+if C['adaptive']['enabled']:
+    FINAL_ARTIFACTS += ['adaptive/variants.tsv.gz','adaptive/core_variants.tsv.gz','adaptive/segment_summary.tsv','adaptive/top2_candidates.tsv','adaptive/shared_top2_regions.tsv']
 
 # Default target: final tables, classifications, plots and enabled analyses.
 rule all:
@@ -124,9 +147,14 @@ rule all:
         'tables/population_match_summary.tsv',
         'tables/classification_summary.tsv',
         expand('classification/{population}.tsv', population=P),
-        expand('plots/{population}.{pair}.png', population=P, pair=PAIRS),
+        expand('plots/contour/{population}.{pair}.png', population=P, pair=PAIRS),
+        expand('plots/landscape/{population}.{kind}.png', population=P, kind=['introgression_landscape','neanderthal_affinity_landscape','denisovan_affinity_landscape']) if C['landscape']['enabled'] else [],
+        expand('affinity/{population}/{ref}.tsv.gz', population=P, ref=list(R)) if C['affinity']['enabled'] else [],
         ['gmm/model_selection.tsv', 'gmm/components.tsv'] if C['gmm']['enabled'] else [],
-        ['individual_calls/all_individual_calls.tsv.gz', 'individual_calls/individual_summary.tsv'] if C['individual']['enabled'] else []
+        ['individual_calls/all_individual_calls.tsv.gz', 'individual_calls/individual_summary.tsv'] if C['individual']['enabled'] else [],
+        ['adaptive/variants.tsv.gz','adaptive/core_variants.tsv.gz','adaptive/segment_summary.tsv','adaptive/top2_candidates.tsv','adaptive/shared_top2_regions.tsv'] if C['adaptive']['enabled'] else [],
+        ['provenance/output_manifest.tsv'] if C['report']['enabled'] else [],
+        ['report/report.html'] if C['report']['enabled'] else []
 
 # Convenience targets used by ``run.py --target ...``.
 rule matches:
@@ -149,4 +177,6 @@ include: "rules/classify.smk"
 include: "rules/gmm.smk"
 include: "rules/individual_calls.smk"
 include: "rules/report.smk"
+include: "rules/new_modules.smk"
 include: "rules/tools.smk"
+
