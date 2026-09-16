@@ -39,9 +39,12 @@ def _task_branch(stage):
     main = next(n for n in nodes if isinstance(n, ast.FunctionDef) and n.name == 'main')
     command = next(n for n in nodes if isinstance(n, ast.FunctionDef) and n.name == 'command')
     path_helper = next(n for n in nodes if isinstance(n, ast.FunctionDef) and n.name == 'as_paths')
-    imports = [n for n in nodes if isinstance(n, (ast.Import, ast.ImportFrom))]
+    # Imports are intentionally excluded: an import used by one branch must
+    # not invalidate unrelated analysis branches.
     runtime = [n for n in nodes if not isinstance(n, (ast.Import, ast.ImportFrom, ast.FunctionDef))]
     common = main.body[:3]  # docstring, config/stage and reference lookup
+    command_stages = {'compile', 'subset', 'concat', 'sprime', 'match', 'contour'}
+    path_stages = {'classification_summary', 'individual_summary'}
     for node in main.body:
         if not isinstance(node, ast.If):
             continue
@@ -53,12 +56,19 @@ def _task_branch(stage):
         for branch in branches:
             if any(isinstance(x, ast.Constant) and x.value == stage for x in ast.walk(branch.test)):
                 shared = ast.Module(body=common, type_ignores=[])
-                return (ast.dump(ast.Module(body=imports, type_ignores=[]), include_attributes=False) +
-                        ast.dump(command, include_attributes=False) +
-                        ast.dump(path_helper, include_attributes=False) +
-                        ast.dump(ast.Module(body=runtime, type_ignores=[]), include_attributes=False) +
-                        ast.dump(shared, include_attributes=False) +
-                        ast.dump(branch, include_attributes=False))
+                # An ``elif`` is represented by the next If in ``orelse``.
+                # Hash only this condition/body pair, never its successors or
+                # the final ``else`` branch.
+                isolated = ast.If(test=branch.test, body=branch.body, orelse=[])
+                pieces = [ast.dump(ast.Module(body=runtime, type_ignores=[]), include_attributes=False),
+                          ast.dump(shared, include_attributes=False),
+                          ast.dump(isolated, include_attributes=False)]
+                if stage in command_stages:
+                    pieces.append(ast.dump(command, include_attributes=False))
+                if stage in path_stages:
+                    pieces.append(ast.dump(path_helper, include_attributes=False))
+                return ('\n'.join(pieces) +
+                        '\n')
     raise ValueError(f'No task.py branch for stage {stage}')
 
 
