@@ -28,7 +28,7 @@ add_colorbar <- function(palette) {
 draw_group <- function(output, paths, refs, wanted, palette) {
   height <- max(1500, 1250 + 80 * length(refs))
   png(output, width=2600, height=height, res=250)
-  kp <- plotKaryotype(genome="hg19", chromosomes=chromosomes, plot.type=1)
+  kp <- plotKaryotype(genome="hg19", chromosomes=chromosomes, plot.type=6)
   lengths <- kp$chromosome.lengths[chromosomes]
   n <- length(refs)
 
@@ -36,10 +36,13 @@ draw_group <- function(output, paths, refs, wanted, palette) {
   # Grey backgrounds make absent displayed segments explicit without creating
   # external stacked tracks.
   for (i in seq_along(refs)) {
-    lower <- (i - 1) / n
-    upper <- i / n
+    # karyoploteR's y-axis grows bottom-to-top. Reverse the index so the first
+    # configured reference is physically the top internal layer, matching the
+    # single figure-level legend's stated top-to-bottom order.
+    lower <- (n - i) / n
+    upper <- (n - i + 1) / n
     kpRect(kp, chr=chromosomes, x0=0, x1=lengths, y0=.10, y1=.90,
-           data.panel=1, r0=lower, r1=upper, col="#DDE3E6", border=NA)
+           data.panel="ideogram", r0=lower, r1=upper, col="#DDE3E6", border=NA)
     rows <- read.delim(paths[[i]], check.names=FALSE, na.strings="NA")
     rows <- rows[rows$archaic_class == wanted, ]
     if (nrow(rows)) {
@@ -48,7 +51,7 @@ draw_group <- function(output, paths, refs, wanted, palette) {
       if (nrow(rows)) {
         idx <- pmax(1, pmin(length(palette), 1 + round(as.numeric(rows$match_rate) * (length(palette) - 1))))
         kpRect(kp, chr=rows$chr, x0=as.numeric(rows$start), x1=as.numeric(rows$end),
-               y0=.10, y1=.90, data.panel=1, r0=lower, r1=upper,
+               y0=.10, y1=.90, data.panel="ideogram", r0=lower, r1=upper,
                col=palette[idx], border=NA)
       }
     }

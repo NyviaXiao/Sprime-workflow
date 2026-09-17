@@ -85,9 +85,15 @@ class AdaptiveTests(unittest.TestCase):
             collector.collect([variants, core, segments], outputs)
             with open(outputs['top2'], newline='') as handle:
                 top = list(csv.DictReader(handle, delimiter='\t'))
+            with open(outputs['segments'], newline='') as handle:
+                segment_fields = csv.DictReader(handle, delimiter='\t').fieldnames
+            top_fields = list(top[0])
         self.assertEqual([(row['adaptive_group'], row['segment_id'], row['adaptive_rank']) for row in top],
                          [('neanderthal','dual','1'), ('neanderthal','n','2'),
                           ('denisovan','dual','1'), ('denisovan','d','2')])
+        for name in ('adaptive_group', 'adaptive_rank', 'selected_top2'):
+            self.assertNotIn(name, segment_fields)
+            self.assertIn(name, top_fields)
 
     def test_alt_frequency_keeps_only_sprime_keys(self):
         class Record:

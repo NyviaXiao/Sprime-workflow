@@ -37,7 +37,15 @@ def _declared_inputs(cfg):
     return items
 
 
-def build_base(config_path, outputs, git_commit):
+def _run_info_summary(path):
+    """Keep validated tool versions and small-input checksums visible, compact."""
+    info = json.loads(Path(path).read_text())
+    return {'validation_time_utc': info.get('time_utc', ''),
+            'tool_versions': info.get('versions', {}),
+            'small_input_sha256': info.get('sha256', {})}
+
+
+def build_base(config_path, run_info_path, outputs, git_commit):
     cfg = json.loads(Path(config_path).read_text())
     enabled = {name: bool(cfg.get(name, {}).get('enabled', False))
                for name in ('gmm', 'individual', 'landscape', 'affinity', 'adaptive', 'report')}
@@ -49,7 +57,9 @@ def build_base(config_path, outputs, git_commit):
         'genome_build': cfg['genome_build'], 'populations': cfg['populations'],
         'chromosomes': cfg['chromosomes'],
         'archaic_references': [ref['id'] for ref in cfg['archaic_references']],
-        'git_commit': git_commit, 'enabled_modules': enabled,
+        'git_commit': git_commit, 'git_dirty': bool(cfg.get('git_dirty', False)),
+        'git_diff_sha256': cfg.get('git_diff_sha256', ''),
+        'enabled_modules': enabled, 'validation': _run_info_summary(run_info_path),
     })
     versions = [('python', _command_version([sys.executable, '--version'])),
                 ('snakemake', _command_version(['snakemake', '--version'])),
@@ -94,6 +104,6 @@ if 'snakemake' in globals():
         build_base(snakemake.input.config, {
             'run': snakemake.output.run, 'resolved': snakemake.output.resolved,
             'software': snakemake.output.software, 'inputs': snakemake.output.inputs,
-        }, snakemake.params.git_commit)
+        }, snakemake.input.run_info, snakemake.params.git_commit)
     else:
         build_outputs(snakemake.input.artifacts, snakemake.output[0])

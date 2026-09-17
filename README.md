@@ -125,6 +125,8 @@ population). A dual-pass segment may therefore be present once in each group.
 `adaptive/shared_top2_regions.tsv` likewise reports overlaps separately by
 adaptive group.
 provenance 精简为配置和 run_info：工具版本、小型关键文件 SHA256、输入路径/大小/修改时间。
+Run provenance also records the Git commit, whether the checkout was dirty, and
+a SHA256 digest of uncommitted tracked changes without storing the raw diff.
 QC 会扫描古人 VCF/mask，检查单染色体限制；完整验证耗时随参考文件大小增加。
 
 landscape、affinity、adaptive、provenance 和 report 是独立 downstream 分支，

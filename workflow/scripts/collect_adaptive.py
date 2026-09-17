@@ -83,14 +83,15 @@ def collect(inputs, outputs):
         population_rows = [row for row in segments if row['population'] == population]
         for adaptive_group in ('neanderthal', 'denisovan'):
             selected.extend(rank_top2(population_rows, adaptive_group))
-    fields = list(segments[0]) if segments else ['population','chromosome','segment_id','candidate_start','candidate_end','max_AF','core_mean_AF','core_variant_count','neanderthal_pass','denisovan_pass','pass_flag']
-    for name in ('adaptive_group', 'adaptive_rank', 'selected_top2'):
-        if name not in fields:
-            fields.append(name)
+    # Segment screening and final rankings are distinct result layers. Keep the
+    # screening table free from blank final-ranking columns.
+    segment_fields = list(segments[0]) if segments else ['population','chromosome','segment_id','candidate_start','candidate_end','max_AF','core_mean_AF','core_variant_count','neanderthal_pass','denisovan_pass','pass_flag']
+    top2_fields = segment_fields + [name for name in ('adaptive_group', 'adaptive_rank', 'selected_top2')
+                                    if name not in segment_fields]
     _write(outputs['variants'], list(variants[0]) if variants else ['population'], variants)
     _write(outputs['core'], list(core_rows[0]) if core_rows else ['population'], core_rows)
-    _write(outputs['segments'], fields, segments)
-    _write(outputs['top2'], fields, selected)
+    _write(outputs['segments'], segment_fields, segments)
+    _write(outputs['top2'], top2_fields, selected)
     _write(outputs['shared'], ['adaptive_group','chromosome','start','end','populations','n_populations'], shared_intervals(selected))
 
 

@@ -22,19 +22,19 @@ background <- "#DDE3E6"
 colors <- c(neanderthal="#3F6F9F", denisovan="#A95243", ambiguous="#7D8790")
 
 png(snakemake@output[["introgression"]], width=2600, height=1700, res=250)
-kp <- plotKaryotype(genome="hg19", chromosomes=chromosomes, plot.type=1)
+kp <- plotKaryotype(genome="hg19", chromosomes=chromosomes, plot.type=6)
 lengths <- kp$chromosome.lengths[chromosomes]
 
 # A uniform grey rectangle establishes the chromosome body. Classification
 # intervals are then drawn directly into the same vertical body, not an
 # external track above or below the chromosome.
 kpRect(kp, chr=chromosomes, x0=0, x1=lengths, y0=0.18, y1=0.82,
-       data.panel=1, r0=0, r1=1, col=background, border=NA)
+       data.panel="ideogram", r0=0, r1=1, col=background, border=NA)
 for (label in names(colors)) {
   rows <- classes[classes$archaic_class == label, ]
   if (nrow(rows)) {
     kpRect(kp, chr=rows$chr, x0=as.numeric(rows$start), x1=as.numeric(rows$end),
-           y0=0.18, y1=0.82, data.panel=1, r0=0, r1=1,
+           y0=0.18, y1=0.82, data.panel="ideogram", r0=0, r1=1,
            col=colors[[label]], border=NA)
   }
 }

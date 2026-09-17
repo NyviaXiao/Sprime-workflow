@@ -7,6 +7,7 @@ contains no scientific calculations.
 """
 import argparse
 import csv
+import hashlib
 import json
 import re
 import subprocess
@@ -15,6 +16,21 @@ from itertools import combinations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+
+
+def git_metadata(root=ROOT):
+    """Return commit identity and a digest-backed dirty-state indicator.
+
+    The digest records uncommitted content without storing a potentially large
+    or sensitive diff in run provenance. Dirty repositories remain permitted.
+    """
+    commit = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+    status = subprocess.check_output(['git', '-C', str(root), 'status', '--porcelain'], text=True)
+    dirty = bool(status.strip())
+    diff = subprocess.check_output(['git', '-C', str(root), 'diff', '--no-ext-diff'], text=False)
+    staged = subprocess.check_output(['git', '-C', str(root), 'diff', '--cached', '--no-ext-diff'], text=False)
+    return {'git_commit': commit, 'git_dirty': dirty,
+            'git_diff_sha256': hashlib.sha256(diff + staged).hexdigest()}
 
 
 def resolve_config(path, overrides):
@@ -148,8 +164,7 @@ def resolve_config(path, overrides):
                 raise ValueError(f'adaptive.{key} must be between 0 and 1')
         if not isinstance(c['adaptive']['min_callable_sites'], int) or c['adaptive']['min_callable_sites'] < 1:
             raise ValueError('adaptive.min_callable_sites must be positive')
-    c['git_commit'] = subprocess.check_output(
-        ['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
+    c.update(git_metadata())
     c['project_root'] = str(ROOT)
     return c
 
