@@ -138,12 +138,13 @@ if C['affinity']['enabled']:
     FINAL_ARTIFACTS += expand('plots/landscape/{population}.{kind}.png', population=P, kind=['neanderthal_affinity_landscape','denisovan_affinity_landscape'])
 if C['gmm']['enabled']:
     FINAL_ARTIFACTS += ['gmm/model_selection.tsv','gmm/components.tsv']
+    FINAL_ARTIFACTS += expand('gmm/plots/{population}.{ref}.png', population=P, ref=C['gmm']['target_references'])
 if C['individual']['enabled']:
     FINAL_ARTIFACTS += ['individual_calls/all_individual_calls.tsv.gz','individual_calls/individual_summary.tsv']
 if C['adaptive']['enabled']:
     FINAL_ARTIFACTS += ['adaptive/variants.tsv.gz','adaptive/core_variants.tsv.gz','adaptive/segment_summary.tsv','adaptive/top2_candidates.tsv','adaptive/shared_top2_regions.tsv']
 if C['report']['enabled']:
-    FINAL_ARTIFACTS += ['report/report.html', 'report/classification_summary.png']
+    FINAL_ARTIFACTS += ['report/report.html', 'report/report.pdf', 'report/classification_summary.png']
     if C['individual']['enabled']:
         FINAL_ARTIFACTS += ['report/individual_summary.png']
 
@@ -165,7 +166,7 @@ rule all:
         ['provenance/run_manifest.json', 'provenance/resolved_config.json',
          'provenance/software_versions.tsv', 'provenance/input_manifest.tsv',
          'provenance/output_manifest.tsv'],
-        ['report/report.html'] if C['report']['enabled'] else []
+        ['report/report.html', 'report/report.pdf'] if C['report']['enabled'] else []
 
 # Convenience targets used by ``run.py --target ...``.
 rule matches:

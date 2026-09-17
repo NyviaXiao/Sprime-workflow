@@ -17,6 +17,11 @@ class LandscapeSmokeTests(unittest.TestCase):
             self.assertIn('ifelse(grepl("^chr", x), x, paste0("chr", x))', script)
             self.assertIn('genome_build', script)
         self.assertIn('output[["introgression"]]', intro)
+        self.assertIn('kpRect(kp, chr=chromosomes', intro)
+        self.assertIn('legend("bottom"', intro)
+        self.assertNotIn('kpAddLabels', affinity)
+        self.assertIn('add_colorbar <- function', affinity)
+        self.assertIn('rasterImage', affinity)
 
     def test_r_landscape_smoke_when_runtime_is_available(self):
         rscript = shutil.which('Rscript')

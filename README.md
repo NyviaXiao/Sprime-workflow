@@ -109,6 +109,7 @@ results/run001/
   provenance/{run_manifest,resolved_config}.json
   provenance/{software_versions,input_manifest,output_manifest}.tsv
   report/report.html
+  report/report.pdf
   logs/
   work/
 ```
@@ -118,12 +119,19 @@ wide 表每个古人包含 matched/mismatch/callable/notcomp/match_rate；long �
 `adaptive/segment_summary.tsv` 与 `adaptive/top2_candidates.tsv` 的
 `candidate_start/candidate_end` 使用 BED-style 0-based half-open 坐标；其余既有
 segment summary 表保持原有的 1-based inclusive 坐标定义。
+Adaptive final candidates are ranked independently within the Neanderthal-
+associated and Denisovan-associated passing sets (Top2 per group and
+population). A dual-pass segment may therefore be present once in each group.
+`adaptive/shared_top2_regions.tsv` likewise reports overlaps separately by
+adaptive group.
 provenance 精简为配置和 run_info：工具版本、小型关键文件 SHA256、输入路径/大小/修改时间。
 QC 会扫描古人 VCF/mask，检查单染色体限制；完整验证耗时随参考文件大小增加。
 
 landscape、affinity、adaptive、provenance 和 report 是独立 downstream 分支，
 直接消费已有结果；它们不会重新计算 SPrime 或 map_arch。Contour 支持
 `all_pairs`（全部古人组合）和 `explicit_pairs`（仅配置组合）。
+`report/report.html` is intended for local interactive browsing; the matching
+`report/report.pdf` is the archival/shareable research-report rendition.
 
 ## 实现与验证范围
 

@@ -45,12 +45,49 @@ class AdaptiveTests(unittest.TestCase):
             for path in outputs.values(): self.assertTrue(path.exists())
             with open(outputs['top2'], newline='') as handle: top = list(csv.DictReader(handle, delimiter='\t'))
             self.assertEqual(top[0]['segment_id'], 's1')
+            self.assertEqual(top[0]['adaptive_group'], 'neanderthal')
 
-    def test_string_zero_never_ranks_or_overlaps(self):
-        rows = [{'population':'P','chromosome':'1','segment_id':'bad','candidate_start':'0','candidate_end':'100','core_mean_AF':'0.99','pass_flag':'0'}, {'population':'P','chromosome':'1','segment_id':'good','candidate_start':'200','candidate_end':'300','core_mean_AF':'0.80','pass_flag':'1'}]
-        self.assertEqual([row['segment_id'] for row in collector.rank_top2(rows)], ['good'])
-        overlap = collector.shared_intervals([{'population':'P1','chromosome':'1','candidate_start':0,'candidate_end':100}, {'population':'P2','chromosome':'1','candidate_start':20,'candidate_end':80}, {'population':'P3','chromosome':'1','candidate_start':90,'candidate_end':120}])
+    def test_group_specific_top2_and_shared_overlaps(self):
+        rows = [
+            {'population':'P','chromosome':'1','segment_id':'bad','candidate_start':'0','candidate_end':'100','core_mean_AF':'0.99','neanderthal_pass':'0','denisovan_pass':'0'},
+            {'population':'P','chromosome':'1','segment_id':'n1','candidate_start':'200','candidate_end':'300','core_mean_AF':'0.80','neanderthal_pass':'1','denisovan_pass':'0'},
+            {'population':'P','chromosome':'1','segment_id':'n2','candidate_start':'400','candidate_end':'500','core_mean_AF':'0.70','neanderthal_pass':'1','denisovan_pass':'0'},
+            {'population':'P','chromosome':'1','segment_id':'n3','candidate_start':'600','candidate_end':'700','core_mean_AF':'0.60','neanderthal_pass':'1','denisovan_pass':'0'},
+            {'population':'P','chromosome':'1','segment_id':'dual','candidate_start':'800','candidate_end':'900','core_mean_AF':'0.95','neanderthal_pass':'1','denisovan_pass':'1'},
+            {'population':'P','chromosome':'1','segment_id':'d1','candidate_start':'1000','candidate_end':'1100','core_mean_AF':'0.85','neanderthal_pass':'0','denisovan_pass':'1'},
+        ]
+        self.assertEqual([row['segment_id'] for row in collector.rank_top2(rows, 'neanderthal')], ['dual', 'n1'])
+        self.assertEqual([row['segment_id'] for row in collector.rank_top2(rows, 'denisovan')], ['dual', 'd1'])
+        self.assertEqual(collector.rank_top2(rows, 'denisovan')[0]['adaptive_group'], 'denisovan')
+        overlap = collector.shared_intervals([
+            {'adaptive_group':'neanderthal','population':'P1','chromosome':'1','candidate_start':0,'candidate_end':100},
+            {'adaptive_group':'neanderthal','population':'P2','chromosome':'1','candidate_start':20,'candidate_end':80},
+            {'adaptive_group':'neanderthal','population':'P3','chromosome':'1','candidate_start':90,'candidate_end':120},
+            {'adaptive_group':'denisovan','population':'P4','chromosome':'1','candidate_start':20,'candidate_end':80},
+        ])
         self.assertEqual([(row['start'], row['end'], row['populations']) for row in overlap], [(20,80,'P1,P2'), (90,100,'P1,P3')])
+        self.assertTrue(all(row['adaptive_group'] == 'neanderthal' for row in overlap))
+
+    def test_collect_writes_two_ranked_groups_and_allows_dual_pass(self):
+        fields = ['population','chromosome','segment_id','candidate_start','candidate_end',
+                  'core_mean_AF','neanderthal_pass','denisovan_pass','pass_flag']
+        rows = [
+            {'population':'P','chromosome':'1','segment_id':'dual','candidate_start':0,'candidate_end':1,'core_mean_AF':.9,'neanderthal_pass':1,'denisovan_pass':1,'pass_flag':1},
+            {'population':'P','chromosome':'1','segment_id':'n','candidate_start':2,'candidate_end':3,'core_mean_AF':.8,'neanderthal_pass':1,'denisovan_pass':0,'pass_flag':1},
+            {'population':'P','chromosome':'1','segment_id':'d','candidate_start':4,'candidate_end':5,'core_mean_AF':.7,'neanderthal_pass':0,'denisovan_pass':1,'pass_flag':1},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            variants, core, segments = tmp/'adaptive.1.variants.tsv.gz', tmp/'adaptive.1.core.tsv.gz', tmp/'adaptive.1.segments.tsv'
+            adaptive._write(variants, ['population'], []); adaptive._write(core, ['population'], [])
+            adaptive._write(segments, fields, rows)
+            outputs = {name:tmp/f'{name}.tsv' for name in ('variants','core','segments','top2','shared')}
+            collector.collect([variants, core, segments], outputs)
+            with open(outputs['top2'], newline='') as handle:
+                top = list(csv.DictReader(handle, delimiter='\t'))
+        self.assertEqual([(row['adaptive_group'], row['segment_id'], row['adaptive_rank']) for row in top],
+                         [('neanderthal','dual','1'), ('neanderthal','n','2'),
+                          ('denisovan','dual','1'), ('denisovan','d','2')])
 
     def test_alt_frequency_keeps_only_sprime_keys(self):
         class Record:

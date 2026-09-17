@@ -66,8 +66,9 @@ rule report:
         individual='individual_calls/individual_summary.tsv' if C['individual']['enabled'] else [],
         gmm='gmm/model_selection.tsv' if C['gmm']['enabled'] else [],
         gmm_plots=expand('gmm/plots/{population}.{ref}.png', population=P, ref=C['gmm']['target_references']) if C['gmm']['enabled'] else [],
-        adaptive='adaptive/top2_candidates.tsv' if C['adaptive']['enabled'] else []
-    output: ['report/report.html', 'report/classification_summary.png'] + (['report/individual_summary.png'] if C['individual']['enabled'] else [])
+        adaptive='adaptive/top2_candidates.tsv' if C['adaptive']['enabled'] else [],
+        adaptive_shared='adaptive/shared_top2_regions.tsv' if C['adaptive']['enabled'] else []
+    output: ['report/report.html', 'report/report.pdf', 'report/classification_summary.png'] + (['report/individual_summary.png'] if C['individual']['enabled'] else [])
     params: code=SIG['report']
     script: str(Path(ROOT) / 'workflow/scripts/build_report.py')
 

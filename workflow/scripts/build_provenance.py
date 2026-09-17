@@ -41,6 +41,8 @@ def build_base(config_path, outputs, git_commit):
     cfg = json.loads(Path(config_path).read_text())
     enabled = {name: bool(cfg.get(name, {}).get('enabled', False))
                for name in ('gmm', 'individual', 'landscape', 'affinity', 'adaptive', 'report')}
+    # Contour lives under ``plots`` rather than as a top-level module.
+    enabled['contour'] = bool(cfg['plots']['contour']['enabled'])
     _dump(outputs['resolved'], cfg)
     _dump(outputs['run'], {
         'run_time': datetime.now(timezone.utc).isoformat(),

@@ -10,6 +10,7 @@ dependencies:
   - scipy=1.14
   - scikit-learn=1.5
   - matplotlib=3.9
+  - weasyprint
   - pyyaml=6
   - r-base=4.4
   - r-mass

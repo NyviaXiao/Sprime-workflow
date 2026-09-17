@@ -82,6 +82,18 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('git_commit=CURRENT_GIT_COMMIT', rules)
         self.assertIn("CURRENT_GIT_COMMIT = C['git_commit']", snakefile)
 
+    def test_gmm_input_log_contains_every_output_wildcard(self):
+        rules = (ROOT/'workflow/rules/gmm.smk').read_text()
+        self.assertIn("log: 'logs/{population}/gmm_input.{ref}.log'", rules)
+        self.assertNotIn("log: 'logs/{population}/gmm_input.log'", rules)
+
+    def test_final_presentation_artifacts_and_contour_manifest_are_declared(self):
+        snakefile = (ROOT/'workflow/Snakefile').read_text()
+        provenance = (ROOT/'workflow/scripts/build_provenance.py').read_text()
+        self.assertIn("'report/report.pdf'", snakefile)
+        self.assertIn("'gmm/plots/{population}.{ref}.png'", snakefile)
+        self.assertIn("enabled['contour']", provenance)
+
     def test_optional_modules_can_be_disabled_in_dag(self):
         if importlib.util.find_spec('snakemake') is None:
             self.skipTest('Snakemake is not installed')

@@ -13,7 +13,10 @@ rule gmm_input:
     input: 'work/{population}/gmm_base.tsv'
     output: 'gmm/input/{population}/{ref}.tsv'
     params: stage='gmm_input', settings=C['gmm'], code=SIG['gmm_input']
-    log: 'logs/{population}/gmm_input.log'
+    # ``ref`` is an output wildcard, so it must also appear in the log path.
+    # Keeping per-reference logs also prevents concurrent GMM input jobs from
+    # writing to the same file.
+    log: 'logs/{population}/gmm_input.{ref}.log'
     script: TASK
 
 # Fit 1/2/3 components independently for each population and target Deni ref.
