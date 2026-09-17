@@ -20,6 +20,8 @@ class LandscapeSmokeTests(unittest.TestCase):
         self.assertIn('plot.type=6', intro)
         self.assertIn('data.panel="ideogram"', intro)
         self.assertNotIn('data.panel=1', intro)
+        self.assertIn('y0=0, y1=1', intro)
+        self.assertNotIn('y0=0.18', intro)
         self.assertIn('kpRect(kp, chr=chromosomes', intro)
         self.assertIn('legend("bottom"', intro)
         self.assertNotIn('kpAddLabels', affinity)

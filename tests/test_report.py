@@ -32,11 +32,28 @@ class ReportTests(unittest.TestCase):
     def test_narratives_distinguish_screening_from_top2(self):
         segment_rows = [{'neanderthal_pass':'1','denisovan_pass':'0'}] * 4 + [{'neanderthal_pass':'0','denisovan_pass':'1'}] * 3
         top2_rows = [{'population':'P','adaptive_group':'neanderthal'}] * 2 + [{'population':'P','adaptive_group':'denisovan'}] * 2
-        text = report._adaptive_narrative(segment_rows, top2_rows)
+        text = report._adaptive_narrative(segment_rows, top2_rows, True)
         self.assertIn('4 Neanderthal-associated and 3 Denisovan-associated passing segments', text)
         self.assertNotIn('candidate rows were retained', text)
-        individual = report._individual_narrative([{'population':'P','archaic_class':'neanderthal','per_individual_introgressed_mb':'4.21','n_introgressed_individuals':'103'}])
+        individual = report._individual_narrative([{'population':'P','archaic_class':'neanderthal','per_individual_introgressed_mb':'4.21','n_introgressed_individuals':'103'}], True)
         self.assertIn('4.21 Mb', individual); self.assertIn('103 individuals', individual)
+
+    def test_enabled_empty_is_distinct_from_disabled_and_affinity_counts_finite_only(self):
+        self.assertEqual(report._adaptive_narrative([], [], False), 'Not enabled for this run.')
+        self.assertIn('enabled, but no qualifying segments', report._adaptive_narrative([], [], True))
+        self.assertEqual(report._individual_narrative([], False), 'Not enabled for this run.')
+        self.assertIn('enabled, but no marker-supported tracts', report._individual_narrative([], True))
+        self.assertEqual(report._gmm_narrative([], False), 'Not enabled for this run.')
+        self.assertIn('enabled, but no population-reference result rows', report._gmm_narrative([], True))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / 'P' / 'n1.tsv.gz'; path.parent.mkdir()
+            rows = [{'population':'P','archaic_class':'neanderthal','match_rate':'0.70'}] * 82 + [{'population':'P','archaic_class':'neanderthal','match_rate':'NA'}] * 18
+            self.write_tsv(path, ['population','archaic_class','match_rate'], rows)
+            text = report._affinity_narrative([path], self.config(), True)
+        self.assertIn('82/100', text)
+        self.assertIn('median = 0.70, mean = 0.70', text)
+        self.assertEqual(report._affinity_narrative([], self.config(), False), 'Not enabled for this run.')
+        self.assertIn('enabled, but no reference-specific result tables', report._affinity_narrative([], self.config(), True))
 
     def test_research_report_html_and_pdf(self):
         try:
@@ -64,7 +81,7 @@ class ReportTests(unittest.TestCase):
                 self.assertIn(heading, page)
             self.assertIn('10 Neanderthal-classified', page); self.assertIn('4.21 Mb', page)
             self.assertIn('4 Neanderthal-associated and 3 Denisovan-associated passing segments', page)
-            self.assertIn('Altai (n=2; median=0.70; mean=0.70)', page)
+            self.assertIn('Altai: finite match rates were available for 2/2', page)
             self.assertIn('selected_components', page); self.assertIn('adjusted_p_1_vs_2', page); self.assertIn('adjusted_p_second', page)
             self.assertNotIn('loglik_1', page); self.assertNotIn('aic_1', page); self.assertNotIn('bic_3', page)
             self.assertGreater(pdf_path.stat().st_size, 0)

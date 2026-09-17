@@ -101,9 +101,9 @@ def build_outputs(paths, output):
 
 if 'snakemake' in globals():
     if snakemake.params.mode == 'base':
-        build_base(snakemake.input.config, {
+        build_base(snakemake.input.config, snakemake.input.run_info, {
             'run': snakemake.output.run, 'resolved': snakemake.output.resolved,
             'software': snakemake.output.software, 'inputs': snakemake.output.inputs,
-        }, snakemake.input.run_info, snakemake.params.git_commit)
+        }, snakemake.params.git_commit)
     else:
         build_outputs(snakemake.input.artifacts, snakemake.output[0])

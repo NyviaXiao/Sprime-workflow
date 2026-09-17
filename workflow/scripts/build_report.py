@@ -7,6 +7,7 @@ scientific classifications, GMM decisions, individual calls, or adaptive filters
 import csv
 import html
 import json
+import math
 import os
 from pathlib import Path
 from statistics import mean, median
@@ -85,27 +86,30 @@ def _classification_narrative(rows):
     return ' '.join(result)
 
 
-def _individual_narrative(rows):
+def _individual_narrative(rows, enabled):
     if not rows:
-        return 'Not enabled for this run.'
+        return ('Individual analysis was enabled, but no marker-supported tracts were identified.'
+                if enabled else 'Not enabled for this run.')
     sentences = []
     for row in rows:
         sentences.append(f"{row['population']} showed {_number(row['per_individual_introgressed_mb'])} Mb of marker-supported {row['archaic_class']}-classified haplotype sequence per individual on average, with {row['n_introgressed_individuals']} individuals carrying at least one such tract.")
     return ' '.join(sentences) + ' These are marker-supported haplotype tracts and are not inferred recombination breakpoints.'
 
 
-def _gmm_narrative(rows):
+def _gmm_narrative(rows, enabled):
     if not rows:
-        return 'Not enabled for this run.'
+        return ('GMM analysis was enabled, but no population-reference result rows were produced.'
+                if enabled else 'Not enabled for this run.')
     selected = [row.get('selected_components', '') for row in rows]
     counts = {item: sum(value == str(item) for value in selected) for item in (1, 2, 3)}
     insufficient = sum(value in ('', 'NA', 'None') for value in selected)
     return (f'Of {len(rows)} population-reference models, {counts[1]} selected one component, {counts[2]} selected two components, and {counts[3]} selected three components; {insufficient} analyses had insufficient data. Mixture component counts describe statistical structure in the match-rate distribution and are not interpreted here as direct counts of historical introgression events.')
 
 
-def _adaptive_narrative(segment_rows, top2_rows):
+def _adaptive_narrative(segment_rows, top2_rows, enabled):
     if not segment_rows:
-        return 'Not enabled for this run.'
+        return ('Adaptive analysis was enabled, but no qualifying segments were identified.'
+                if enabled else 'Not enabled for this run.')
     nean = sum(int(row.get('neanderthal_pass', 0)) == 1 for row in segment_rows)
     deni = sum(int(row.get('denisovan_pass', 0)) == 1 for row in segment_rows)
     sentence = (f'Adaptive screening retained {nean} Neanderthal-associated and {deni} Denisovan-associated passing segments. Candidates were ranked independently within each archaic group using core mean introgressed-allele frequency. The report displays up to two candidates per group and population.')
@@ -117,9 +121,10 @@ def _adaptive_narrative(segment_rows, top2_rows):
     return sentence + (' ' + ' '.join(short) if short else '')
 
 
-def _affinity_narrative(paths, cfg):
+def _affinity_narrative(paths, cfg, enabled):
     if not paths:
-        return 'Not enabled for this run.'
+        return ('Affinity analysis was enabled, but no reference-specific result tables were available.'
+                if enabled else 'Not enabled for this run.')
     refs = {ref['id']: ref for ref in cfg['archaic_references']}
     summaries = []
     for path in paths:
@@ -131,21 +136,28 @@ def _affinity_narrative(paths, cfg):
         rates = []
         for row in rows:
             try:
-                rates.append(float(row['match_rate']))
+                value = float(row['match_rate'])
+                if math.isfinite(value):
+                    rates.append(value)
             except (KeyError, TypeError, ValueError):
                 pass
         population = rows[0]['population'] if rows else Path(path).parent.name
-        if rates:
-            summaries.append((population, ref['group'], ref['tag'], len(rows), median(rates), mean(rates)))
+        summaries.append((population, ref['group'], ref['tag'], len(rows), len(rates),
+                          median(rates) if rates else None, mean(rates) if rates else None))
     if not summaries:
-        return 'No finite reference-specific match rates were available among the corresponding classified segments.'
+        return 'Affinity analysis was enabled, but no segments in the corresponding final class were available.'
     sentences = []
     for population in sorted({item[0] for item in summaries}):
         for group in ('neanderthal', 'denisovan'):
             items = [item for item in summaries if item[0] == population and item[1] == group]
             if items:
-                details = ', '.join(f'{tag} (n={count}; median={_number(med)}; mean={_number(avg)})' for _, _, tag, count, med, avg in items)
-                sentences.append(f'Among {population} {group}-classified segments, reference-specific match-rate summaries were {details}.')
+                details = []
+                for _, _, tag, n_classified, n_finite, med, avg in items:
+                    if n_finite:
+                        details.append(f'{tag}: finite match rates were available for {n_finite}/{n_classified} {group}-classified segments; median = {_number(med)}, mean = {_number(avg)}')
+                    else:
+                        details.append(f'{tag}: finite match rates were available for 0/{n_classified} {group}-classified segments')
+                sentences.append(f'Among {population} {group}-classified segments, ' + '; '.join(details) + '.')
     return ' '.join(sentences)
 
 
@@ -198,28 +210,28 @@ def build_report(output_html, output_pdf, run_manifest, software_versions, resol
     cards = ''.join(f'<div class="card"><span>{html.escape(label)}</span><strong>{html.escape(str(value))}</strong></div>' for label, value in (
         ('Genome build', manifest.get('genome_build', '')), ('Populations', ', '.join(manifest.get('populations', []))), ('Archaic references', len(manifest.get('archaic_references', []))), ('Workflow commit', manifest.get('git_commit', '')), ('Working tree dirty', manifest.get('git_dirty', False)), ('Generated', manifest.get('run_time', ''))))
     executive = '<p>' + _classification_narrative(class_rows) + '</p>'
-    if individual_rows: executive += '<p>' + _individual_narrative(individual_rows) + '</p>'
+    if individual_rows: executive += '<p>' + _individual_narrative(individual_rows, enabled.get('individual', False)) + '</p>'
     if gmm_rows: executive += f'<p>GMM analysis was performed for {len(gmm_rows)} population-reference models; {sum(row.get("selected_components", "") in ("2", "3") for row in gmm_rows)} selected more than one mixture component.</p>'
-    if segment_rows: executive += '<p>' + _adaptive_narrative(segment_rows, top2_rows) + '</p>'
-    intro_html = ''.join(_figure(f'{Path(path).stem.split(".")[0]} - Introgression Landscape', path, 'Figure C1. Genome-wide distribution of classified SPrime segments. Colored intervals are overlaid directly on GRCh37 chromosome bodies; grey regions are not covered by displayed classified segments.', outdir) for path in intro_images) or '<p class="muted">Not enabled for this run.</p>'
+    if segment_rows: executive += '<p>' + _adaptive_narrative(segment_rows, top2_rows, enabled.get('adaptive', False)) + '</p>'
+    intro_html = ''.join(_figure(f'{Path(path).stem.split(".")[0]} - Introgression Landscape', path, 'Figure C1. Genome-wide distribution of classified SPrime segments. Colored intervals are overlaid directly on GRCh37 chromosome bodies; grey regions are not covered by displayed classified segments.', outdir) for path in intro_images) or f'<p class="muted">{"Landscape analysis was enabled, but no landscape figure was available." if enabled.get("landscape", False) else "Not enabled for this run."}</p>'
     nean_paths = [path for path in affinity_images if '.neanderthal_affinity_landscape.' in str(path)]
     deni_paths = [path for path in affinity_images if '.denisovan_affinity_landscape.' in str(path)]
-    nean_html = ''.join(_figure(f'{Path(path).stem.split(".")[0]} - Neanderthal Affinity Landscape', path, 'Figure D1. Reference-specific affinity of Neanderthal-classified segments. Each chromosome body is internally divided into reference layers; color intensity represents segment match rate from 0 to 1.', outdir) for path in nean_paths) or '<p class="muted">Not enabled for this run.</p>'
-    deni_html = ''.join(_figure(f'{Path(path).stem.split(".")[0]} - Denisovan Affinity Landscape', path, 'Figure D2. Reference-specific affinity of Denisovan-classified segments. Each chromosome body is internally divided into reference layers; color intensity represents segment match rate from 0 to 1.', outdir) for path in deni_paths) or '<p class="muted">Not enabled for this run.</p>'
+    nean_html = ''.join(_figure(f'{Path(path).stem.split(".")[0]} - Neanderthal Affinity Landscape', path, 'Figure D1. Reference-specific affinity of Neanderthal-classified segments. Each chromosome body is internally divided into reference layers; color intensity represents segment match rate from 0 to 1.', outdir) for path in nean_paths) or f'<p class="muted">{"Affinity analysis was enabled, but no Neanderthal affinity figure was available." if enabled.get("affinity", False) else "Not enabled for this run."}</p>'
+    deni_html = ''.join(_figure(f'{Path(path).stem.split(".")[0]} - Denisovan Affinity Landscape', path, 'Figure D2. Reference-specific affinity of Denisovan-classified segments. Each chromosome body is internally divided into reference layers; color intensity represents segment match rate from 0 to 1.', outdir) for path in deni_paths) or f'<p class="muted">{"Affinity analysis was enabled, but no Denisovan affinity figure was available." if enabled.get("affinity", False) else "Not enabled for this run."}</p>'
     compact_adaptive = ['population', 'adaptive_group', 'adaptive_rank', 'chromosome', 'segment_id', 'candidate_start', 'candidate_end', 'core_mean_AF', 'max_AF', 'core_variant_count', 'neanderthal_pass', 'denisovan_pass']
     compact_gmm = [field for field in GMM_COLUMNS if gmm_rows and field in gmm_rows[0]]
     refs = {ref['id']: ref['tag'] for ref in cfg['archaic_references']}
     contour_pair = cfg['report'].get('contour_pair', [])
-    contour_text = (f"Figure E1 compares segment-level match rates to {refs.get(contour_pair[0], contour_pair[0])} and {refs.get(contour_pair[1], contour_pair[1])} in {cfg['report'].get('contour_population', '')}." if contour else 'Not enabled for this run.')
+    contour_text = (f"Figure E1 compares segment-level match rates to {refs.get(contour_pair[0], contour_pair[0])} and {refs.get(contour_pair[1], contour_pair[1])} in {cfg['report'].get('contour_population', '')}." if contour else ('Contour analysis was enabled, but no contour figure was available.' if enabled.get('contour', False) else 'Not enabled for this run.'))
     sections = [
         ('overview', 'A. Run Overview', '<p>Run metadata and software versions identify this analysis without embedding filesystem paths or the complete resolved configuration.</p>' + _table([{'run_time': manifest.get('run_time', ''), 'genome_build': manifest.get('genome_build', ''), 'populations': ', '.join(manifest.get('populations', [])), 'chromosomes': ', '.join(manifest.get('chromosomes', [])), 'archaic_references': ', '.join(manifest.get('archaic_references', [])), 'enabled_modules': json.dumps(enabled, sort_keys=True), 'git_commit': manifest.get('git_commit', ''), 'git_dirty': manifest.get('git_dirty', False)}]) + '<h3>A2. Analysis Settings</h3>' + _table(_settings_rows(cfg)) + '<h3>Software environment</h3>' + _table(software)),
         ('classification', 'B. Classification Results', '<p>' + _classification_narrative(class_rows) + '</p>' + _table(class_rows) + (_figure('Classification genome coverage', classification_plot, 'Figure B1. Marker-supported genomic coverage by final segment classification.', outdir) if classification_plot else '')),
         ('landscape', 'C. Introgression Landscape', '<p>Classified segments are shown at their genomic positions on a common GRCh37 chromosome background; this display does not infer hotspots or enrichment.</p>' + intro_html),
-        ('affinity', 'D. Archaic Affinity Analysis', '<p>' + _affinity_narrative(affinity_tables, cfg) + '</p><p>Affinity plots are descriptive reference-specific match rates for segments in the corresponding final class. They do not assign a donor or source population.</p><h3>D1. Neanderthal Affinity</h3>' + nean_html + '<h3>D2. Denisovan Affinity</h3>' + deni_html),
+        ('affinity', 'D. Archaic Affinity Analysis', '<p>' + _affinity_narrative(affinity_tables, cfg, enabled.get('affinity', False)) + '</p><p>Affinity plots are descriptive reference-specific match rates for segments in the corresponding final class. They do not assign a donor or source population.</p><h3>D1. Neanderthal Affinity</h3>' + nean_html + '<h3>D2. Denisovan Affinity</h3>' + deni_html),
         ('contour', 'E. Pairwise Archaic Affinity Contour', '<p>' + contour_text + '</p>' + (_figure('Configured Neanderthal x Denisovan contour', contour, 'Figure E1. Segment-level pairwise match-rate density. The plot is descriptive and does not assign archaic source identity.', outdir) if contour else '')),
-        ('individual', 'F. Individual-level Introgression', ('<p>' + _individual_narrative(individual_rows) + '</p>' + _table(individual_rows) + (_figure('Per-individual archaic haplotype amount', individual_plot, 'Figure F1. Mean marker-supported archaic haplotype sequence amount per target individual.', outdir) if individual_plot else '')) if individual_rows else '<p class="muted">Not enabled for this run.</p>'),
-        ('gmm', 'G. GMM Analysis', '<p>' + _gmm_narrative(gmm_rows) + '</p>' + (_table(gmm_rows, compact_gmm) + ''.join(_figure(Path(path).stem, path, 'Figure G. GMM result shown only where more than one component was selected.', outdir) for path in _selected_gmm_plots(gmm_rows, gmm_plots)) if gmm_rows else '')),
-        ('adaptive', 'H. Adaptive Introgression Candidates', '<p>' + _adaptive_narrative(segment_rows, top2_rows) + '</p><h3>H1. Neanderthal-associated candidates</h3>' + (_table([row for row in top2_rows if row.get('adaptive_group') == 'neanderthal'], compact_adaptive) if any(row.get('adaptive_group') == 'neanderthal' for row in top2_rows) else '<p class="muted">No qualifying candidate.</p>') + '<h3>H2. Denisovan-associated candidates</h3>' + (_table([row for row in top2_rows if row.get('adaptive_group') == 'denisovan'], compact_adaptive) if any(row.get('adaptive_group') == 'denisovan' for row in top2_rows) else '<p class="muted">No qualifying candidate.</p>') + '<h3>H3. Shared Top2 regions</h3>' + (_table(shared_rows) if shared_rows else '<p class="muted">No shared Top2 regions were identified.</p>')),
+        ('individual', 'F. Individual-level Introgression', '<p>' + _individual_narrative(individual_rows, enabled.get('individual', False)) + '</p>' + (_table(individual_rows) + (_figure('Per-individual archaic haplotype amount', individual_plot, 'Figure F1. Mean marker-supported archaic haplotype sequence amount per target individual.', outdir) if individual_plot else '') if individual_rows else '')),
+        ('gmm', 'G. GMM Analysis', '<p>' + _gmm_narrative(gmm_rows, enabled.get('gmm', False)) + '</p>' + (_table(gmm_rows, compact_gmm) + ''.join(_figure(Path(path).stem, path, 'Figure G. GMM result shown only where more than one component was selected.', outdir) for path in _selected_gmm_plots(gmm_rows, gmm_plots)) if gmm_rows else '')),
+        ('adaptive', 'H. Adaptive Introgression Candidates', '<p>' + _adaptive_narrative(segment_rows, top2_rows, enabled.get('adaptive', False)) + '</p><h3>H1. Neanderthal-associated candidates</h3>' + (_table([row for row in top2_rows if row.get('adaptive_group') == 'neanderthal'], compact_adaptive) if any(row.get('adaptive_group') == 'neanderthal' for row in top2_rows) else '<p class="muted">No qualifying candidate.</p>') + '<h3>H2. Denisovan-associated candidates</h3>' + (_table([row for row in top2_rows if row.get('adaptive_group') == 'denisovan'], compact_adaptive) if any(row.get('adaptive_group') == 'denisovan' for row in top2_rows) else '<p class="muted">No qualifying candidate.</p>') + '<h3>H3. Shared Top2 regions</h3>' + (_table(shared_rows) if shared_rows else '<p class="muted">No shared Top2 regions were identified.</p>')),
         ('provenance', 'I. Reproducibility & Provenance', '<p>Detailed resolved configuration and input/output manifests remain in the provenance directory.</p>' + _table([{'git_commit': manifest.get('git_commit', ''), 'git_dirty': manifest.get('git_dirty', False), 'git_diff_sha256': manifest.get('git_diff_sha256', ''), 'genome_build': manifest.get('genome_build', ''), 'populations': ', '.join(manifest.get('populations', [])), 'chromosomes': ', '.join(manifest.get('chromosomes', [])), 'archaic_references': ', '.join(manifest.get('archaic_references', [])), 'enabled_modules': json.dumps(enabled, sort_keys=True)}]) + '<h3>Core tool versions</h3>' + _table([row for row in software if row.get('software') in ('snakemake', 'bcftools', 'java', 'R')])),
     ]
     toc = ''.join(f'<a href="#{anchor}">{title}</a>' for anchor, title, _ in sections)
