@@ -1,6 +1,7 @@
 # Archaic Introgression Analysis Workflow
 
-A reproducible workflow for multi-population archaic introgression analysis. It uses SPrime to identify archaic introgressed segments and integrates segment classification, haplotype/individual-level tract calling, GMM-based analysis of Denisovan introgression components, adaptive introgression screening, visualization, and automated reporting.
+A reproducible workflow for multi-population archaic introgression analysis. 
+It uses SPrime to identify archaic introgressed segments and integrates segment classification, haplotype/individual-level tract calling, GMM-based analysis of Denisovan introgression components, adaptive introgression screening, visualization, and automated reporting.
 
 ## Overview
 
@@ -25,8 +26,6 @@ The workflow supports:
 
 ## Installation
 
-The workflow is designed for Linux.
-
 Create the Conda environment:
 
 ```bash
@@ -41,14 +40,6 @@ cd tools/map_arch
 make -B
 cd ../..
 ```
-
-Optional: run the test suite.
-
-```bash
-python -m unittest discover -s tests -v
-```
-
----
 
 ## Running the workflow
 
@@ -278,8 +269,9 @@ affinity:
 
 ## Pairwise archaic affinity contours
 
-Contour plots compare segment-level match rates between pairs of archaic references. Two modes are supported:`all_pairs` and `explicit_pairs`
+Contour plots compare segment-level match rates between pairs of archaic references. Two modes are supported:`all_pairs` and `explicit_pairs`.
 
+`all_pairs` mode:
 ```yaml
 plots:
   contour:
@@ -287,7 +279,7 @@ plots:
     mode: all_pairs
     pairs: []
 ```
-
+`explicit_pairs` mode:
 ```yaml
 plots:
   contour:
@@ -339,7 +331,6 @@ A Neanderthal-associated candidate passes when at least one configured Neanderth
 
 ```text
 callable >= min_callable_sites
-AND
 match_rate >= neanderthal_match_threshold
 ```
 
@@ -486,8 +477,6 @@ gmm/model_selection.tsv
 ---
 
 ## Citation
-
-If you use SPrime, please cite:
 
 > Browning SR, Browning BL, Zhou Y, Tucci S, Akey JM.  
 > **Analysis of human sequence data reveals two pulses of archaic Denisovan admixture.**  
