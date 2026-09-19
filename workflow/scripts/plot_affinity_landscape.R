@@ -18,16 +18,36 @@ add_colorbar <- function(palette) {
   # A true continuous raster colour bar, rather than three discrete swatches.
   old <- par(no.readonly=TRUE)
   on.exit(par(old), add=TRUE)
-  par(fig=c(0.36, 0.64, 0.015, 0.09), new=TRUE, mar=c(1.8, 0, 1.4, 0))
+  par(fig=c(0.30, 0.70, 0.018, 0.085), new=TRUE,
+      mar=c(1.8, 0.5, 1.2, 0.5), xpd=NA)
   plot.new(); plot.window(xlim=c(0, 1), ylim=c(0, 1))
-  rasterImage(as.raster(matrix(palette, nrow=1)), 0, 0.42, 1, 0.72, interpolate=FALSE)
-  axis(1, at=c(0, .5, 1), labels=c("0", "0.5", "1"), tick=FALSE, line=-.4, cex.axis=.9)
-  mtext("Match rate", side=3, line=.1, cex=.9)
+  rasterImage(as.raster(matrix(palette, nrow=1)), 0, 0.36, 1, 0.68, interpolate=FALSE)
+  box(which="plot", col="#B8C3C8")
+  axis(1, at=c(0, .5, 1), labels=c("0", "0.5", "1"), tick=FALSE,
+       line=-.35, cex.axis=.82)
+  mtext("Match rate", side=3, line=.05, cex=.86)
+}
+
+display_labels <- function(ids) {
+  labels <- as.character(ids)
+  # Snakemake exposes the resolved config to R scripts. Use configured tags
+  # only for figure labels; internal IDs and all file mappings remain intact.
+  if ("config" %in% slotNames(snakemake)) {
+    configured <- snakemake@config[["archaic_references"]]
+    if (length(configured)) {
+      for (i in seq_along(labels)) {
+        hit <- Filter(function(ref) identical(as.character(ref$id), labels[[i]]), configured)
+        if (length(hit) && !is.null(hit[[1]]$tag)) labels[[i]] <- as.character(hit[[1]]$tag)
+      }
+    }
+  }
+  labels
 }
 
 draw_group <- function(output, paths, refs, wanted, palette) {
   height <- max(1500, 1250 + 80 * length(refs))
-  png(output, width=2600, height=height, res=250)
+  png(output, width=2800, height=height, res=250)
+  par(mar=c(7, 5, 8, 13), oma=c(0, 0, 0, 0))
   kp <- plotKaryotype(genome="hg19", chromosomes=chromosomes, plot.type=6)
   lengths <- kp$chromosome.lengths[chromosomes]
   n <- length(refs)
@@ -38,10 +58,10 @@ draw_group <- function(output, paths, refs, wanted, palette) {
   for (i in seq_along(refs)) {
     # karyoploteR's y-axis grows bottom-to-top. Reverse the index so the first
     # configured reference is physically the top internal layer, matching the
-    # single figure-level legend's stated top-to-bottom order.
+    # single figure-level legend.
     lower <- (n - i) / n
     upper <- (n - i + 1) / n
-    kpRect(kp, chr=chromosomes, x0=0, x1=lengths, y0=.10, y1=.90,
+    kpRect(kp, chr=chromosomes, x0=0, x1=lengths, y0=0, y1=1,
            data.panel="ideogram", r0=lower, r1=upper, col="#DDE3E6", border=NA)
     rows <- read.delim(paths[[i]], check.names=FALSE, na.strings="NA")
     rows <- rows[rows$archaic_class == wanted, ]
@@ -51,18 +71,18 @@ draw_group <- function(output, paths, refs, wanted, palette) {
       if (nrow(rows)) {
         idx <- pmax(1, pmin(length(palette), 1 + round(as.numeric(rows$match_rate) * (length(palette) - 1))))
         kpRect(kp, chr=rows$chr, x0=as.numeric(rows$start), x1=as.numeric(rows$end),
-               y0=.10, y1=.90, data.panel="ideogram", r0=lower, r1=upper,
+               y0=0, y1=1, data.panel="ideogram", r0=lower, r1=upper,
                col=palette[idx], border=NA)
       }
     }
   }
   title(main=paste(snakemake@wildcards[["population"]], "-", tools::toTitleCase(wanted), "Affinity Landscape"),
-        line=1, cex.main=1.4, font.main=2)
-  # Show labels only once in a figure-level key, ordered top to bottom exactly
-  # as the internal layers are drawn. No reference text is repeated by chr.
-  legend("topright", legend=paste(seq_along(refs), refs),
-         title="Reference layers - top to bottom", bty="n", cex=.9,
-         inset=c(-.02, 0), xpd=NA)
+        line=3.5, cex.main=1.4, font.main=2)
+  # A single right-side annotation block identifies the internal layers. It is
+  # deliberately separate from the chromosome panel and never repeats by chr.
+  legend("right", legend=paste(seq_along(refs), display_labels(refs)),
+         title="Reference layers", bty="n", cex=.9,
+         inset=c(-.14, 0), xpd=NA)
   add_colorbar(palette)
   dev.off()
 }

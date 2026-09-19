@@ -29,6 +29,9 @@ class LandscapeSmokeTests(unittest.TestCase):
         self.assertIn('data.panel="ideogram"', affinity)
         self.assertIn('lower <- (n - i) / n', affinity)
         self.assertIn('upper <- (n - i + 1) / n', affinity)
+        self.assertIn('y0=0, y1=1', affinity)
+        self.assertNotIn('top to bottom', affinity)
+        self.assertIn('display_labels <- function', affinity)
         self.assertIn('add_colorbar <- function', affinity)
         self.assertIn('rasterImage', affinity)
 

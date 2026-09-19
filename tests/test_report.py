@@ -55,6 +55,13 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report._affinity_narrative([], self.config(), False), 'Not enabled for this run.')
         self.assertIn('enabled, but no reference-specific result tables', report._affinity_narrative([], self.config(), True))
 
+    def test_report_table_projection_and_formatting(self):
+        rows = [{'population':'P', 'archaic_class':'neanderthal', 'n_segments':'12', 'genome_coverage_mb':'1.234567'}]
+        rendered = report._table(rows, report.CLASSIFICATION_COLUMNS)
+        self.assertIn('1.2346', rendered)
+        self.assertNotIn('1.234567', rendered)
+        self.assertIn('class="compact"', rendered)
+
     def test_research_report_html_and_pdf(self):
         try:
             import matplotlib, weasyprint
@@ -83,7 +90,10 @@ class ReportTests(unittest.TestCase):
             self.assertIn('4 Neanderthal-associated and 3 Denisovan-associated passing segments', page)
             self.assertIn('Altai: finite match rates were available for 2/2', page)
             self.assertIn('selected_components', page); self.assertIn('adjusted_p_1_vs_2', page); self.assertIn('adjusted_p_second', page)
+            compact_gmm = report._table([{'population':'P','reference':'d1','n_segments':'10','status':'ok','method':'legacy','selected_components':'2','adjusted_p_1_vs_2':'.01','second_comparison':'2_vs_3','adjusted_p_second':'.2'}], report.GMM_COLUMNS)
+            self.assertNotIn('n_segments', compact_gmm); self.assertNotIn('status', compact_gmm); self.assertNotIn('method', compact_gmm); self.assertNotIn('second_comparison', compact_gmm)
             self.assertNotIn('loglik_1', page); self.assertNotIn('aic_1', page); self.assertNotIn('bic_3', page)
+            self.assertNotIn('git_diff_sha256', page); self.assertIn('provenance/</code> directory', page)
             self.assertGreater(pdf_path.stat().st_size, 0)
 
 
