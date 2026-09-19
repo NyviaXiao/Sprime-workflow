@@ -1,6 +1,6 @@
 # Archaic Introgression Analysis Workflow
 
-A reproducible workflow for multi-population archaic introgression analysis. 
+A reproducible end-to-end workflow for multi-population archaic introgression analysis. 
 It uses SPrime to identify archaic introgressed segments and integrates segment classification, haplotype/individual-level tract calling, GMM-based analysis of Denisovan introgression components, adaptive introgression screening, visualization, and automated reporting.
 
 ## Overview
@@ -467,12 +467,6 @@ GMMs are fitted independently for every configured population-reference combinat
 | BEB | CHS |
 |---|---|
 | ![BEB GMM](images/BEB.denisovan3.png) | ![CHS GMM](images/CHS.denisovan3.png) |
-
-Complete model-selection results are available in:
-
-```text
-gmm/model_selection.tsv
-```
 
 ---
 

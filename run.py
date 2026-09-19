@@ -19,18 +19,17 @@ ROOT = Path(__file__).resolve().parent
 
 
 def git_metadata(root=ROOT):
-    """Return commit identity and a digest-backed dirty-state indicator.
+    """Return Git metadata when available without requiring a Git checkout."""
+    try:
+        commit = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'],text=True,stderr=subprocess.DEVNULL,).strip()
+        status = subprocess.check_output(['git', '-C', str(root), 'status', '--porcelain'],text=True,stderr=subprocess.DEVNULL,)
+        diff = subprocess.check_output(['git', '-C', str(root), 'diff', '--no-ext-diff'],stderr=subprocess.DEVNULL,)
+        staged = subprocess.check_output(['git', '-C', str(root), 'diff', '--cached', '--no-ext-diff'],stderr=subprocess.DEVNULL,)
+        return {'git_commit': commit,'git_dirty': bool(status.strip()),'git_diff_sha256': hashlib.sha256(diff + staged).hexdigest(),
+        }
 
-    The digest records uncommitted content without storing a potentially large
-    or sensitive diff in run provenance. Dirty repositories remain permitted.
-    """
-    commit = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
-    status = subprocess.check_output(['git', '-C', str(root), 'status', '--porcelain'], text=True)
-    dirty = bool(status.strip())
-    diff = subprocess.check_output(['git', '-C', str(root), 'diff', '--no-ext-diff'], text=False)
-    staged = subprocess.check_output(['git', '-C', str(root), 'diff', '--cached', '--no-ext-diff'], text=False)
-    return {'git_commit': commit, 'git_dirty': dirty,
-            'git_diff_sha256': hashlib.sha256(diff + staged).hexdigest()}
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return {'git_commit': None,'git_dirty': None,'git_diff_sha256': None,}
 
 
 def resolve_config(path, overrides):
