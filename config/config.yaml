@@ -4,13 +4,13 @@ genome_build: GRCh37
 
 # Modern cohort VCF. {chrom} is replaced with each value in chromosomes.
 # A single multi-chromosome VCF path is also accepted.
-vcf: /public/group_data_2023/xiaoyn/Data_1KGP/chrom_{chrom}.vcf.gz
-samples:  samples-test.tsv
-outdir: ../results/run004
+vcf: /data/modern/chr{chrom}.vcf.gz
+samples:  samples.tsv
+outdir: ../results/run001
 chromosomes: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22']
 
 # GRCh37 genetic map and analysis executables.
-genetic_map: /public/group_data_2023/xiaoyn/Data_map/GRCh37map/plink.all.GRch37.map
+genetic_map: /data/maps/plink.all.GRCh37.map
 sprime_jar: ../tools/sprime.jar
 map_arch: ../tools/map_arch/map_arch
 
@@ -25,28 +25,28 @@ archaic_references:
   - id: altai_nean
     group: neanderthal
     tag: AltaiNean
-    vcf: /public/group_data_2023/xiaoyn/Data_Nean/Data_Altai_16/gz/chr{chrom}.vcf.gz
-    mask: /public/group_data_2023/xiaoyn/Data_Nean/Data_Altai_16/FilterBed/chr{chrom}_mask.bed.gz
+    vcf: /data/archaic/Data_Nean/Data_Altai_16/chr{chrom}.vcf.gz
+    mask: /data/archaic/Data_Nean/Data_Altai_16/chr{chrom}_mask.bed.gz
   - id: vindijia_nean
     group: neanderthal
     tag: Vindijia
-    vcf: /public/group_data_2023/wangc/Data/Archaic_data/vindijia/chr{chrom}_mq25_mapab100.vcf.gz
-    mask: /public/group_data_2023/wangc/Data/Archaic_data/vindijia/mask/chr{chrom}_mask.bed.gz
+    vcf: /data/archaic/vindijia/chr{chrom}.vcf.gz
+    mask: /data/archaic/vindijia/chr{chrom}_mask.bed.gz
   - id: chagyrskaya_nean
     group: neanderthal
     tag: Chagyrskaya
-    vcf: /public/group_data_2023/wangc/Data/Archaic_data/Chagyrskaya/chr{chrom}.noRB.vcf.gz 
-    mask: /public/group_data_2023/wangc/Data/Archaic_data/Chagyrskaya/Filtered_bed/chr{chrom}_mask.bed.gz
+    vcf: /data/archaic/Chagyrskaya/chr{chrom}.vcf.gz
+    mask: /data/archaic/Chagyrskaya/chr{chrom}_mask.bed.gz
   - id: denisovan3
     group: denisovan
     tag: Denisovan3
-    vcf: /public/group_data_2023/xiaoyn/Data_Denisovan/Denisovan/chr_{chrom}.vcf.gz
-    mask: /public/group_data_2023/xiaoyn/Data_Denisovan/Denisovan/FilterBed/chr{chrom}_mask.bed.gz
+    vcf: /data/archaic/denisova3/chr{chrom}.vcf.gz
+    mask: /data/archaic/denisova3/chr{chrom}_mask.bed.gz
   - id: denisovan25
     group: denisovan
     tag: Denisovan25
-    vcf: /public/group_data_2023/wangc/Data/Archaic_data/denisova25/chr{chrom}.Den25.L35MQ25.B30.map35_100.vcf.gz
-    mask: /public/group_data_2023/wangc/Data/Archaic_data/denisova25/FilterBed/Denisova25.chr{chrom}.hg19.L35MQ25.map35_100.GCcov.noSimpleRepeat.noIndel.min10x.bed.gz
+    vcf: /data/archaic/denisova25/chr{chrom}.vcf.gz
+    mask: /data/archaic/denisova25/chr{chrom}_mask.bed.gz
 gmm:
   enabled: true
   # Fit a separate GMM to the match-rate column of each target reference.

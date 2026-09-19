@@ -24,3 +24,4 @@ legacy/
 config/config-test.yaml
 config/samples-test-1pop.tsv
 config/samples-test.tsv
+tools/map_arch/map_arch
