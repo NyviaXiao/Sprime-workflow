@@ -1,14 +1,26 @@
+# Workflow outputs
 results/
 .snakemake/
+logs/
+
+# Python cache
 __pycache__/
 *.pyc
+
+# Test environments
 .venv-test/
 .test-results/
+
+# Local files
 nohup.out
 deal.sh
-tests/
 README.test.md
+
+# Development-only code
+tests/
 legacy/
+
+# Test configurations
 config/config-test.yaml
 config/samples-test-1pop.tsv
 config/samples-test.tsv
