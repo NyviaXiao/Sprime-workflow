@@ -62,7 +62,7 @@ rule report:
         classification='tables/classification_summary.tsv',
         intro=expand('plots/landscape/{population}.introgression_landscape.png', population=P) if C['landscape']['enabled'] else [],
         affinity=expand('plots/landscape/{population}.{kind}.png', population=P, kind=['neanderthal_affinity_landscape','denisovan_affinity_landscape']) if C['affinity']['enabled'] else [],
-        contour=f"plots/contour/{C['report']['contour_population']}.{C['report']['contour_pair'][0]}__{C['report']['contour_pair'][1]}.png" if C['report']['enabled'] and C['plots']['contour']['enabled'] else [],
+        contour=expand("plots/contour/{population}." +C['report']['contour_pair'][0] + "__" +C['report']['contour_pair'][1] + ".png",population=P) if C['report']['enabled'] and C['plots']['contour']['enabled'] else [],
         individual='individual_calls/individual_summary.tsv' if C['individual']['enabled'] else [],
         gmm='gmm/model_selection.tsv' if C['gmm']['enabled'] else [],
         gmm_plots=expand('gmm/plots/{population}.{ref}.png', population=P, ref=C['gmm']['target_references']) if C['gmm']['enabled'] else [],

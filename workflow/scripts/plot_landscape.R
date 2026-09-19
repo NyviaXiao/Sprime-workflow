@@ -22,7 +22,28 @@ background <- "#DDE3E6"
 colors <- c(neanderthal="#3F6F9F", denisovan="#A95243", ambiguous="#7D8790")
 
 png(snakemake@output[["introgression"]], width=2600, height=1700, res=250)
-kp <- plotKaryotype(genome="hg19", chromosomes=chromosomes, plot.type=6)
+
+main_title <- paste(
+  snakemake@wildcards[["population"]],
+  "- Introgression Landscape"
+)
+
+plot.params <- getDefaultPlotParams(plot.type=6)
+
+# 给标题和底部 legend 留出独立空间
+plot.params$topmargin <- 80
+plot.params$bottommargin <- 75
+
+kp <- plotKaryotype(
+  genome="hg19",
+  chromosomes=chromosomes,
+  plot.type=6,
+  plot.params=plot.params,
+  main=main_title,
+  cex=1.45,
+  font=2
+)
+
 lengths <- kp$chromosome.lengths[chromosomes]
 
 # A uniform grey rectangle establishes the chromosome body. Classification
@@ -41,8 +62,8 @@ for (label in names(colors)) {
 
 # Titles and the one shared legend sit outside the chromosome panel so neither
 # can overlap genomic intervals or chromosome labels.
-title(main=paste(snakemake@wildcards[["population"]], "- Introgression Landscape"),
-      line=1, cex.main=1.45, font.main=2)
+# title(main=paste(snakemake@wildcards[["population"]], "- Introgression Landscape"),
+#       line=1, cex.main=1.45, font.main=2)
 legend("bottom", legend=c("Neanderthal", "Denisovan", "Ambiguous"),
        fill=unname(colors), horiz=TRUE, bty="n", inset=c(0, -0.08),
        xpd=NA, cex=1.05)

@@ -1,185 +1,495 @@
-# SPrime workflow (Linux)
+# Archaic Introgression Analysis Workflow
 
-VCF → 群体 SPrime → 多古人匹配 → 汇总、GMM、个体单倍型 call。
-普通 Linux 服务器即可，不要求 SLURM。所有原始代码保存在工程外；本目录是独立实现。
+A reproducible workflow for multi-population archaic introgression analysis. It uses SPrime to identify archaic introgressed segments and integrates segment classification, haplotype/individual-level tract calling, GMM-based analysis of Denisovan introgression components, adaptive introgression screening, visualization, and automated reporting.
 
-## 安装与运行
+## Overview
+
+The workflow supports:
+
+- population-specific SPrime analysis;
+- multiple target populations in a single run;
+- support for an arbitrary number of Neanderthal and Denisovan reference individuals;
+- segment-level archaic match statistics;
+- Neanderthal / Denisovan / ambiguous classification;
+- Denisovan introgressed component test based on match-rate distributions using GMM;
+- haplotype(individual)-level introgressed tract calling;
+- genome-wide introgression landscapes plots;
+- reference-specific affinity landscapes plots;
+- pairwise archaic affinity contour plots;
+- adaptive introgression candidate screening;
+- cross-population comparison of adaptive candidates;
+- HTML and PDF reports;
+- resumable execution.
+
+---
+
+## Installation
+
+The workflow is designed for Linux.
+
+Create the Conda environment:
 
 ```bash
-cd Sprime-workflow-main
 conda env create -f environment.yaml
 conda activate sprime-workflow
-cd tools/map_arch
-make -B
-
-cd ../..
-python -m unittest discover -s tests -v
-python run.py run --config config/config.yaml --cores 8 --memory-mb 32000 --dry-run
-python run.py run --config config/config.yaml --cores 8 --memory-mb 32000
 ```
 
-先修改 `config/config.yaml` 的 VCF、遗传图谱、古人 VCF/mask 路径与 `config/samples.tsv`。
-配置中的相对路径以配置文件所在目录为基准；命令行路径以当前目录为基准。
-VCF 支持单文件或 `chr{chrom}.vcf.gz` 模板；在 shell 中请给模板加引号。
-现代人输入通过流式筛选读取，无需预先建立索引；群体子集自动生成 CSI 索引。
-古人 VCF 和 mask 必须逐染色体存放，每个古人 VCF 只有一个样本。
-染色体命名必须与遗传图谱一致。参考版本由使用者确认，软件不能从 VCF 自动证明组装版本一致。
+Compile `map_arch`:
 
 ```bash
-python run.py run --config config/config.yaml \
-  --vcf '/data/chr{chrom}.vcf.gz' --samples /data/samples.tsv \
-  --outdir results/run002 --cores 16 --memory-mb 64000
+cd tools/map_arch
+make -B
+cd ../..
 ```
 
-相同命令可断点续跑。`--target matches|gmm|individual` 可只运行对应依赖链。
-默认一任务一 CPU；内存预算用于限制并发，不是操作系统硬限制。
-map_arch 按染色体坐标分配大量内存，须按实际服务器调整 `resources.map_arch_mem_mb`。
-工作目录中保留群体 VCF，供 individual call 和重跑使用；不自动删除大文件。
+Optional: run the test suite.
 
-## 输入与规则
+```bash
+python -m unittest discover -s tests -v
+```
 
-`samples.tsv` 是带表头的 TSV：`sample_id, population, role`；role 为 target 或 outgroup。
-任意数量的尼安德特/丹尼索瓦人写入 `archaic_references`；ID/tag 必须唯一。
-每个古人从同一个 SPrime score 独立匹配，保留每位古人的计数和 match rate。
+---
 
-汇总分母是 `match + mismatch`，`notcomp` 不计入；默认分母至少 10，低于阈值为 NA。
-内部保存完整精度，旧 R 脚本四舍五入到四位，因此展示精度可能不同。
-群体 pooled rate 为分子之和/分母之和（按片段记录累计，非全基因组去重估计）。
+## Running the workflow
 
-GMM 预处理从 `SCORE > 150000` 的位点重新计数。每个 reference 只有在
-callable 数至少 30 时才参与该片段的阈值判断；每个 Nean/Deni 组至少要有一个
-合格 reference。判断使用合格 reference 的最大 rate：max(Nean) < 0.3 且
-max(Deni) > 0.3。每个 target Denisovan 都使用自己的 callable 合格片段单独建模，
-不对多个 target 求平均或合并。AIC/BIC 输出在 `gmm/model_selection.tsv` 中，仅供参考，
-不参与现有 LRT、p-value 或 selected_components 决策。
-**不进行片段长度筛选**，`length_bp` 仅为结果描述字段。
-基础匹配表、分类表和 GMM 筛选表分别保留，以便核查筛选对结果的影响。
+Run the complete workflow:
 
-GMM 默认复现现有逐级 1/2/3 成分选择方式：先 1 vs 2，再 2 vs 3 或 1 vs 3。
-修正了旧代码将 1 vs 3 的结果标作 2 vs 3 的问题；多次初始化默认 10 次。
-Bonferroni 第一阶段按“群体数 × 建模参考数”，第二阶段按其 2 倍校正；
-包含数据不足的预定检验。输出原始 p、校正 p、比较名称、均值、权重及标准差。
-`legacy_chi_square` 保留旧统计方法；有限混合模型不满足常规卡方 LRT 的一般条件，
-可选 `parametric_bootstrap` 校准混合模型比较（并不校准上游筛选造成的偏倚）。
-GMM 成分数是分布模型的结果，不能单独当作已证实的历史渗入事件次数。
-少于 10 个片段或少于 3 个不同数值时输出 `insufficient_data`，不伪造 p 值。
+```bash
+python run.py run \
+  --config config/config.yaml \
+  --cores 8 \
+  --memory-mb 32000
+```
 
-分类使用配置中的 Nean/Deni reference 列表，并分别取可用 rate 的最大值。
-Nean: max(N) > 0.6 且 max(D) < 0.4；Deni: max(D) > 0.3 且 max(N) < 0.3；
-所有未命中这两类的片段（包括 match rate 缺失）归为 ambiguous。
+Input and output paths can also be overridden from the command line:
 
-个体 call 直接按 `(CHROM, POS, REF, ALT)` 对齐 VCF 与 score，在每个 SPrime 片段内，
-分别查找每个目标个体两条单倍型连续携带 SPrime ALLELE 的 marker run，默认至少 2 个。
-“连续”指相邻 SPrime marker；没有最大物理距离限制。缺失 GT 中断 run；
-非缺失 GT 必须为 phased diploid，且相位应在分析区间内一致。本流程不执行定相。
-outgroup 不进入个体 call。样本名与 haplotype 是独立列，避免切割样本名中的点。
-坐标表使用 1-based inclusive；BED mask 使用 0-based half-open。个体边界是首末支持 marker，
-并非碱基级断点估计。重复运行覆盖目标输出，不进行旧代码的追加写入。
+```bash
+python run.py run \
+  --config config/config.yaml \
+  --vcf '/data/modern/chr{chrom}.vcf.gz' \
+  --samples /data/metadata/samples.tsv \
+  --outdir results/example \
+  --cores 16 \
+  --memory-mb 64000
+```
 
-## 输出
+Use `--dry-run` to inspect the planned jobs before execution:
+
+```bash
+python run.py run \
+  --config config/config.yaml \
+  --cores 8 \
+  --memory-mb 32000 \
+  --dry-run
+```
+
+Runs are resumable. If execution is interrupted, rerunning the same command will reuse completed outputs whose dependencies remain valid.
+
+Convenience targets are also available:
+
+```bash
+--target matches
+--target gmm
+--target individual
+```
+
+---
+
+## Input data
+
+The workflow requires:
+
+1. a phased modern-human VCF;
+2. a sample metadata table;
+3. a GRCh37 genetic map;
+4. SPrime and `map_arch`;
+5. one VCF and callable mask for each archaic reference.
+
+The modern VCF may be either a single multi-chromosome file or a chromosome template.
+
+### Sample metadata
+
+The sample table is a tab-separated file with three columns:
+
+```text
+sample_id    population    role
+```
+
+`role` must be either `target` or `outgroup`.
+
+Example:
+
+```tsv
+sample_id	population	role
+BEB001	BEB	target
+BEB002	BEB	target
+CHS001	CHS	target
+CHS002	CHS	target
+YRI001	YRI	outgroup
+YRI002	YRI	outgroup
+```
+
+Multiple target populations can be included in the same run. Each target population is analyzed independently, while outgroup samples are shared across population-specific SPrime analyses.
+
+See `config/samples.tsv` for an example.
+
+---
+
+## Configuration
+
+A complete analysis is controlled through `config/config.yaml`.
+
+### General parameters
+
+| Parameter | Description |
+|---|---|
+| `genome_build` | Genome assembly used by the workflow. Landscape plotting currently assumes GRCh37/hg19. |
+| `vcf` | Modern phased VCF; may be a single file or a `{chrom}` template. |
+| `samples` | Sample metadata TSV containing `sample_id`, `population`, and `role`. |
+| `outdir` | Output directory. |
+| `chromosomes` | Chromosomes included in the analysis. |
+| `genetic_map` | Genetic map supplied to SPrime. |
+| `sprime_minscore` | Minimum candidate score passed to SPrime. |
+| `summary_min_callable` | Minimum number of callable archaic sites required to report a segment-level match rate. |
+
+---
+
+## Archaic references
+
+Any number of archaic references can be configured.
+
+| Field | Description |
+|---|---|
+| `id` | Internal identifier used in output paths and table columns. |
+| `group` | Archaic group: `neanderthal` or `denisovan`. |
+| `tag` | Human-readable reference label. |
+| `vcf` | Per-chromosome archaic VCF. |
+| `mask` | Callable-region mask for the archaic reference. |
+
+Each reference is matched independently against the same SPrime candidate markers, so reference-specific counts and match rates are retained.
+
+---
+
+## Archaic classification
+
+Classification uses the maximum available match rate within the configured Neanderthal and Denisovan reference groups.
+
+For each segment:
+
+```text
+max_N = maximum available Neanderthal match rate
+max_D = maximum available Denisovan match rate
+```
+
+A segment is classified as **Neanderthal** when:
+
+```text
+max_N > neanderthal_gt
+max_D < denisovan_lt_for_neanderthal
+```
+
+Default:
+
+```text
+max_N > 0.60
+max_D < 0.40
+```
+
+A segment is classified as **Denisovan** when:
+
+```text
+max_D > denisovan_gt
+max_N < neanderthal_lt_for_denisovan
+```
+
+Default:
+
+```text
+max_D > 0.30
+max_N < 0.30
+```
+
+---
+
+# Gaussian mixture modeling
+
+GMM analysis evaluates the distribution of archaic match rates after a dedicated eligibility filter.
+
+
+## GMM input filtering
+
+GMM statistics are recalculated after retaining SPrime markers satisfying:
+
+```text
+SCORE > score_gt
+```
+
+A reference participates in eligibility filtering only when:
+
+```text
+callable >= min_callable
+```
+
+Candidate segments are retained when:
+
+```text
+max(qualified Neanderthal rate) < neanderthal_rate_lt
+max(qualified Denisovan rate) > denisovan_rate_gt
+```
+
+Each `target_reference` must additionally satisfy its own callable requirement. GMMs are fitted independently for every:`population` × `target_reference`
+
+One-, two-, and three-component Gaussian mixture models are fitted. Available methods are:`legacy_chi_square` and `parametric_bootstrap`
+
+`AIC` and `BIC` are retained as diagnostics but do not determine the selected component count.
+
+Mixture components describe statistical structure in the match-rate distribution and should not by themselves be interpreted as direct evidence for a specific number of historical introgression events.
+
+
+---
+
+## Individual-level introgression
+
+Individual-level analysis examines candidate introgressed markers separately for each phased haplotype.
+
+```yaml
+individual:
+  enabled: true
+  min_markers: 2
+```
+
+---
+
+## Genome-wide landscapes
+Displays the genomic distribution of `Neanderthal`/`Denisovan`/`ambiguous` segments. One landscape is generated for each target population.
+
+```yaml
+landscape:
+  enabled: true
+```
+Displays reference-specific match rates along the genome. Separate figures are generated for Neanderthal- and Denisovan-classified segments for each population.
+
+```yaml
+affinity:
+  enabled: true
+```
+
+---
+
+## Pairwise archaic affinity contours
+
+Contour plots compare segment-level match rates between pairs of archaic references. Two modes are supported:`all_pairs` and `explicit_pairs`
+
+```yaml
+plots:
+  contour:
+    enabled: true
+    mode: all_pairs
+    pairs: []
+```
+
+```yaml
+plots:
+  contour:
+    enabled: true
+    mode: explicit_pairs
+    pairs:
+      - [altai_nean, denisovan3]
+```
+
+The report can display one selected pair across all target populations:
+
+```yaml
+report:
+  enabled: true
+  contour_pair: [altai_nean, denisovan3]
+```
+
+---
+
+## Adaptive introgression screening
+
+Adaptive screening uses the inferred introgressed-allele frequency at SPrime markers.
+
+```yaml
+adaptive:
+  enabled: true
+  min_allele_frequency: 0.30
+  max_frequency_drop: 0.20
+  min_callable_sites: 10
+  neanderthal_match_threshold: 0.50
+  denisovan_match_threshold: 0.40
+```
+
+Initial candidate markers must satisfy:
+
+```text
+introgressed_AF > min_allele_frequency
+```
+
+Core variants are then defined as:
+
+```text
+introgressed_AF >= max_AF - max_frequency_drop
+```
+
+Archaic match rates are recalculated using these core variants.
+
+A Neanderthal-associated candidate passes when at least one configured Neanderthal reference satisfies:
+
+```text
+callable >= min_callable_sites
+AND
+match_rate >= neanderthal_match_threshold
+```
+
+Denisovan-associated candidates are evaluated analogously using `denisovan_match_threshold`.
+
+Candidates are ranked independently within each population and archaic group using `core_mean_AF`.
+
+The workflow reports the Top2 candidates per population and group and identifies overlapping Top2 regions across populations.
+
+---
+
+## Output structure
+
+A complete run produces:
 
 ```text
 results/run001/
-  qc/validation.tsv
-  resolved_config.json
-  run_info.json
-  sprime/{population}/chr{chrom}.score
-  archaic_match/{population}/{reference}/chr{chrom}.mscore
-  tables/segment_match_rates.wide.tsv.gz
-  tables/segment_match_rates.long.tsv.gz
-  tables/population_match_summary.tsv
-  tables/classification_summary.tsv
-  classification/{population}.tsv
-  gmm/input/{population}/{reference}.tsv
-  gmm/model_selection.tsv
-  gmm/components.tsv
-  gmm/plots/{population}.{reference}.png
-  individual_calls/all_individual_calls.tsv.gz
-  individual_calls/by_population/{population}/{class}.tsv.gz
-  individual_calls/individual_summary.tsv
-  plots/landscape/{population}.introgression_landscape.png
-  plots/landscape/{population}.neanderthal_affinity_landscape.png
-  plots/landscape/{population}.denisovan_affinity_landscape.png
-  affinity/{population}/{reference}.tsv.gz
-  plots/contour/{population}.{reference1}__{reference2}.png
-  adaptive/{variants,core_variants}.tsv.gz
-  adaptive/segment_summary.tsv
-  adaptive/top2_candidates.tsv
-  adaptive/shared_top2_regions.tsv
-  provenance/{run_manifest,resolved_config}.json
-  provenance/{software_versions,input_manifest,output_manifest}.tsv
-  report/report.html
-  report/report.pdf
-  logs/
-  work/
+├── qc/
+│   └── validation.tsv
+├── sprime/
+│   └── {population}/chr{chrom}.score
+├── archaic_match/
+│   └── {population}/{reference}/chr{chrom}.mscore
+├── tables/
+│   ├── segment_match_rates.wide.tsv.gz
+│   ├── segment_match_rates.long.tsv.gz
+│   ├── population_match_summary.tsv
+│   └── classification_summary.tsv
+├── classification/
+│   └── {population}.tsv
+├── gmm/
+│   ├── model_selection.tsv
+│   ├── components.tsv
+│   └── plots/
+├── individual_calls/
+│   ├── all_individual_calls.tsv.gz
+│   ├── individual_summary.tsv
+│   └── by_population/
+├── affinity/
+│   └── {population}/{reference}.tsv.gz
+├── adaptive/
+│   ├── variants.tsv.gz
+│   ├── core_variants.tsv.gz
+│   ├── segment_summary.tsv
+│   ├── top2_candidates.tsv
+│   └── shared_top2_regions.tsv
+├── plots/
+│   ├── landscape/
+│   └── contour/
+├── provenance/
+│   ├── run_manifest.json
+│   ├── resolved_config.json
+│   ├── software_versions.tsv
+│   ├── input_manifest.tsv
+│   └── output_manifest.tsv
+├── report/
+│   ├── report.html
+│   ├── report.pdf
+│   ├── classification_summary.png
+│   └── individual_summary.png
+├── logs/
+└── work/
 ```
 
-wide 表每个古人包含 matched/mismatch/callable/notcomp/match_rate；long 表每行一个片段-古人。
-个体表包含 population/sample_id/haplotype/chromosome/start/end/length_bp/marker_count/segment_id/archaic_class。
-`adaptive/segment_summary.tsv` 与 `adaptive/top2_candidates.tsv` 的
-`candidate_start/candidate_end` 使用 BED-style 0-based half-open 坐标；其余既有
-segment summary 表保持原有的 1-based inclusive 坐标定义。
-Adaptive final candidates are ranked independently within the Neanderthal-
-associated and Denisovan-associated passing sets (Top2 per group and
-population). A dual-pass segment may therefore be present once in each group.
-`adaptive/shared_top2_regions.tsv` likewise reports overlaps separately by
-adaptive group.
-provenance 精简为配置和 run_info：工具版本、小型关键文件 SHA256、输入路径/大小/修改时间。
-Run provenance also records the Git commit, whether the checkout was dirty, and
-a SHA256 digest of uncommitted tracked changes without storing the raw diff.
-QC 会扫描古人 VCF/mask，检查单染色体限制；完整验证耗时随参考文件大小增加。
+---
 
-landscape、affinity、adaptive、provenance 和 report 是独立 downstream 分支，
-直接消费已有结果；它们不会重新计算 SPrime 或 map_arch。Contour 支持
-`all_pairs`（全部古人组合）和 `explicit_pairs`（仅配置组合）。
-`report/report.html` is intended for local interactive browsing; the matching
-`report/report.pdf` is the archival/shareable research-report rendition.
+## Final report
 
-## 实现与验证范围
+When enabled:
+
+```yaml
+report:
+  enabled: true
+```
+
+the workflow generates:
 
 ```text
-Sprime-workflow-main/
-  run.py                       # Linux 命令行入口
-  environment.yaml             # Conda 运行环境
-  config/                      # 路径、参考列表、阈值、样本表
-  workflow/
-    Snakefile                  # 总入口和最终目标
-    rules/
-      validate.smk
-      prepare_vcf.smk
-      sprime.smk
-      archaic_match.smk
-      summarize.smk
-      classify.smk
-      gmm.smk
-      individual_calls.smk
-      report.smk
-      new_modules.smk
-      tools.smk
-    scripts/
-      task.py                  # 公共执行入口和日志
-      core.py                  # 汇总、筛选、分类等共享函数
-      validate_inputs.py
-      call_individual_tracts.py
-      run_gmm.py
-      plot_contour.R
-      build_affinity_tables.py
-      plot_landscape.R
-      plot_affinity_landscape.R
-      run_adaptive.py
-      collect_adaptive.py
-      build_provenance.py
-      build_report.py
-  tools/                       # JAR、map_arch 源码及编译文件
-  tests/
-  legacy/                      # 原始分析脚本的只读参考副本
+report/report.html
+report/report.pdf
 ```
 
-`rules/` 按分析阶段拆分依赖，`scripts/` 保存实现；`plot_contour.R` 保留 MASS::kde2d 绘图。
-Snakemake 的代码签名按 stage 计算：入口会关闭同一 dispatcher 脚本的整体 code trigger，
-改由 stage-local `params.code` 追踪；因此只修改 GMM fitting 不会使上游匹配或 classification
-失效，classification 改变会使 individual 分支失效，但不会触发 GMM。
-原 `score_summary.r/pre_data.r/selectGene2.py` 的重复处理已合并；原文件副本在 `legacy/`。
-`tools/map_arch` 保留提供的 C 程序接口，并修复 VCF 表头读取、未初始化值及缺失 GT 处理；
-Linux 上须重新编译。由于修复会影响异常/缺失输入的行为，应与旧结果逐项比较。
-本工程未附现代人/古人/遗传图谱真实数据；真实 Linux 全链路和科学结果一致性需用研究数据验收。
+The report summarizes:
+
+- analysis settings;
+- archaic classification;
+- multi-population genome coverage;
+- introgression landscapes;
+- archaic affinity landscapes;
+- pairwise contour plots;
+- individual-level introgression;
+- GMM model results;
+- adaptive introgression candidates;
+- software versions.
+
+---
+
+## Example multi-population analysis
+
+The workflow was tested in a joint analysis of two 1000 Genomes populations, **BEB** and **CHS**. Selected outputs are shown below.
+
+### Classification summary
+
+![Classification genome coverage](images/classification_summary.png)
+
+### Introgression landscape
+
+![CHS introgression landscape](images/CHS.introgression_landscape.png)
+
+### Archaic affinity landscapes
+
+**BEB — Neanderthal affinity**
+
+![BEB Neanderthal affinity](images/BEB.neanderthal_affinity_landscape.png)
+
+**CHS — Denisovan affinity**
+
+![CHS Denisovan affinity](images/CHS.denisovan_affinity_landscape.png)
+
+### Pairwise archaic affinity
+
+| BEB | CHS |
+|---|---|
+| ![BEB contour](images/BEB.altai_nean__denisovan3.png) | ![CHS contour](images/CHS.altai_nean__denisovan3.png) |
+
+### Individual-level summary
+
+![Individual summary](images/individual_summary.png)
+
+### Gaussian mixture models
+
+GMMs are fitted independently for every configured population-reference combination. The report displays figures only for models selecting two or three components.
+
+| BEB | CHS |
+|---|---|
+| ![BEB GMM](images/BEB.denisovan3.png) | ![CHS GMM](images/CHS.denisovan3.png) |
+
+Complete model-selection results are available in:
+
+```text
+gmm/model_selection.tsv
+```
+
+---
+
+## Citation
+
+If you use SPrime, please cite:
+
+> Browning SR, Browning BL, Zhou Y, Tucci S, Akey JM.  
+> **Analysis of human sequence data reveals two pulses of archaic Denisovan admixture.**  
+> *Cell*. 2018;173(1):53–61.  
+> doi:10.1016/j.cell.2018.02.031

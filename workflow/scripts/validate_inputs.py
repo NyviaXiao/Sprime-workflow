@@ -1,92 +1,138 @@
-"""Validate inputs before expensive jobs and record run provenance.
+"""Lightweight fail-fast validation of essential workflow inputs."""
 
-The checks focus on assumptions made by SPrime and the bundled map_arch:
-sample membership, chromosome naming, one ancient individual per VCF and
-sorted single-chromosome BED masks.
-"""
-import hashlib
 import json
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from core import read, write, op
+
+from core import read, write
 
 
 def validate(s, c):
-    """Run fail-fast validation and write QC/provenance output files."""
+    """Validate cheap input assumptions required by downstream tools."""
     import pysam
+
     samples = read(c['samples'])
-    wanted = {r['sample_id'] for r in samples}
-    records, modern = [], {}
-    # Validate modern and ancient inputs chromosome by chromosome. This scans
-    # ancient records intentionally because map_arch indexes solely by POS.
+    wanted_samples = {row['sample_id'] for row in samples}
+    records = []
+
+    # Modern VCF:
+    # - required samples must exist
+    # - chromosome naming must agree with config (e.g. 1 vs chr1)
+    checked_modern = {}
+
     for chrom in c['chromosomes']:
         path = c['vcf'].format(chrom=chrom)
-        with pysam.VariantFile(path) as v:
-            present = set(v.header.samples)
-            if not wanted <= present:
-                raise ValueError(f'{path}: missing samples {wanted-present}')
-            if chrom not in v.header.contigs:
-                raise ValueError(f'{path}: chromosome {chrom} missing in header')
-            modern[path] = True
-        records.append({'check': 'modern_header', 'detail': f'{chrom}: {path}', 'status': 'PASS'})
+
+        if path not in checked_modern:
+            with pysam.VariantFile(path) as vcf:
+                checked_modern[path] = {
+                    'samples': set(vcf.header.samples),
+                    'contigs': set(vcf.header.contigs),
+                }
+
+        header = checked_modern[path]
+
+        missing = wanted_samples - header['samples']
+        if missing:
+            raise ValueError(
+                f'{path}: missing samples {sorted(missing)}'
+            )
+
+        if chrom not in header['contigs']:
+            raise ValueError(
+                f'{path}: chromosome {chrom} missing from VCF header'
+            )
+
+        records.append({
+            'check': 'modern_vcf_header',
+            'detail': f'{chrom}: {path}',
+            'status': 'PASS',
+        })
+
+    # Ancient VCF:
+    # - exactly one ancient sample
+    # - chromosome naming must agree with config
+    #
+    # Header only: do NOT scan variant records.
+    checked_ancient = {}
+
+    for chrom in c['chromosomes']:
         for ref in c['archaic_references']:
-            av = ref['vcf'].format(chrom=chrom)
-            with pysam.VariantFile(av) as v:
-                if len(v.header.samples) != 1:
-                    raise ValueError(f'{av}: map_arch requires exactly one ancient sample')
-                # Bundled map_arch indexes by POS, so multi-chromosome inputs are unsafe.
-                for record in v:
-                    if record.contig != chrom:
-                        raise ValueError(f'{av}: must contain only chromosome {chrom}')
-            # map_arch treats BED intervals as 0-based, half-open callable
-            # regions. Sorted, non-overlapping intervals avoid ambiguous masks.
-            mask = ref['mask'].format(chrom=chrom)
-            last_end = -1
-            with op(mask) as f:
-                for line in f:
-                    if not line.strip() or line.startswith(('#', 'track', 'browser')):
-                        continue
-                    fields = line.split()
-                    if len(fields) < 3 or fields[0] != chrom:
-                        raise ValueError(f'{mask}: must contain only chromosome {chrom}')
-                    start, end = map(int, fields[1:3])
-                    if start < 0 or end <= start or start < last_end:
-                        raise ValueError(f'{mask}: BED must be sorted, nonoverlapping, 0-based half-open')
-                    last_end = end
-            records.append({'check': 'archaic', 'detail': f'{ref["id"]}: {chrom}', 'status': 'PASS'})
-    # SPrime expects chromosome identifiers in its genetic map to match those
-    # supplied through chrom= exactly (for example, 1 versus chr1).
-    map_chroms = set()
-    with open(c['genetic_map']) as f:
-        for line in f:
+            path = ref['vcf'].format(chrom=chrom)
+
+            if path not in checked_ancient:
+                with pysam.VariantFile(path) as vcf:
+                    checked_ancient[path] = {
+                        'n_samples': len(vcf.header.samples),
+                        'contigs': set(vcf.header.contigs),
+                    }
+
+            header = checked_ancient[path]
+
+            if header['n_samples'] != 1:
+                raise ValueError(
+                    f'{path}: map_arch requires exactly one ancient sample'
+                )
+
+            if chrom not in header['contigs']:
+                raise ValueError(
+                    f'{path}: chromosome {chrom} missing from VCF header'
+                )
+
+            records.append({
+                'check': 'ancient_vcf_header',
+                'detail': f'{ref["id"]}: {chrom}',
+                'status': 'PASS',
+            })
+
+    # Genetic map chromosome naming must match config exactly.
+    # This is a text file and is normally small compared with VCF inputs.
+    map_chromosomes = set()
+
+    with open(c['genetic_map']) as handle:
+        for line in handle:
             fields = line.split()
             if fields:
-                map_chroms.add(fields[0])
-    if not set(c['chromosomes']) <= map_chroms:
-        raise ValueError('Genetic map chromosome names do not match configuration')
-    for pop in c['populations']:
-        count = sum(r['role'] == 'target' and r['population'] == pop for r in samples)
-        records.append({'check': 'target_samples', 'detail': f'{pop}: {count}', 'status': 'PASS'})
-    records.append({'check': 'genome_build', 'detail': c['genome_build'] + ': user-declared, not inferred', 'status': 'DECLARED'})
-    # Capture complete version strings because tools often include build and
-    # linked-library details after the first line.
-    versions = {}
-    for tool, args in [('bcftools', ['bcftools', '--version']), ('java', ['java', '-version']), ('R', ['Rscript', '--version'])]:
-        r = subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        versions[tool] = r.stdout.strip()
-    def digest(path):
-        """SHA-256 small, essential inputs without loading them into memory."""
-        h = hashlib.sha256()
-        with open(path, 'rb') as f:
-            for block in iter(lambda: f.read(1048576), b''):
-                h.update(block)
-        return h.hexdigest()
-    # Large VCFs are represented by path, size and mtime to keep startup cost
-    # reasonable; small code/tool inputs receive a cryptographic checksum.
-    info = {'time_utc': datetime.now(timezone.utc).isoformat(),
-            'resolved_config': str(Path(c['outdir']) / 'resolved_config.json'), 'versions': versions,
-            'sha256': {k: digest(c[k]) for k in ('samples', 'sprime_jar', 'map_arch')},
-            'inputs': [{'path': str(p), 'size': Path(p).stat().st_size, 'mtime_ns': Path(p).stat().st_mtime_ns} for p in s.input]}
-    Path(s.output[1]).write_text(json.dumps(info, indent=2))
-    write(s.output[0], ['check', 'detail', 'status'], records)
+                map_chromosomes.add(fields[0])
+
+    missing_map_chromosomes = (
+        set(c['chromosomes']) - map_chromosomes
+    )
+
+    if missing_map_chromosomes:
+        raise ValueError(
+            'Genetic map chromosome names do not match configuration: '
+            f'missing {sorted(missing_map_chromosomes)}'
+        )
+
+    records.append({
+        'check': 'genetic_map_chromosomes',
+        'detail': ','.join(c['chromosomes']),
+        'status': 'PASS',
+    })
+
+    records.append({
+        'check': 'genome_build',
+        'detail': (
+            f'{c["genome_build"]}: user-declared, not inferred'
+        ),
+        'status': 'DECLARED',
+    })
+
+    # Minimal run information required by downstream provenance generation.
+    info = {
+        'time_utc': datetime.now(timezone.utc).isoformat(),
+        'resolved_config': str(
+            Path(c['outdir']) / 'resolved_config.json'
+        ),
+    }
+
+    Path(s.output[1]).write_text(
+        json.dumps(info, indent=2) + '\n'
+    )
+
+    write(
+        s.output[0],
+        ['check', 'detail', 'status'],
+        records,
+    )

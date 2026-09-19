@@ -49,10 +49,40 @@ display_labels <- function(ids) {
 }
 
 draw_group <- function(output, paths, refs, wanted, palette) {
+
   height <- max(1500, 1250 + 80 * length(refs))
-  png(output, width=2800, height=height, res=250)
-  par(mar=c(7, 5, 8, 13), oma=c(0, 0, 0, 0))
-  kp <- plotKaryotype(genome="hg19", chromosomes=chromosomes, plot.type=6)
+
+  png(
+    output,
+    width=2800,
+    height=height,
+    res=250
+  )
+
+  main_title <- paste(
+    snakemake@wildcards[["population"]],
+    "-",
+    tools::toTitleCase(wanted),
+    "Affinity Landscape"
+  )
+
+  plot.params <- getDefaultPlotParams(plot.type=6)
+
+  # Explicit layout space for title, colorbar and reference labels.
+  plot.params$topmargin <- 80
+  plot.params$bottommargin <- 70
+  plot.params$rightmargin <- 0.3
+
+  kp <- plotKaryotype(
+    genome="hg19",
+    chromosomes=chromosomes,
+    plot.type=6,
+    plot.params=plot.params,
+    main=main_title,
+    cex=1.4,
+    font=2
+  )
+
   lengths <- kp$chromosome.lengths[chromosomes]
   n <- length(refs)
 
@@ -80,13 +110,19 @@ draw_group <- function(output, paths, refs, wanted, palette) {
       }
     }
   }
-  title(main=paste(snakemake@wildcards[["population"]], "-", tools::toTitleCase(wanted), "Affinity Landscape"),
-        line=3.5, cex.main=1.4, font.main=2)
+  # title(main=paste(snakemake@wildcards[["population"]], "-", tools::toTitleCase(wanted), "Affinity Landscape"),
+  #       line=3.5, cex.main=1.4, font.main=2)
   # A single right-side annotation block identifies the internal layers. It is
   # deliberately separate from the chromosome panel and never repeats by chr.
-  legend("right", legend=paste(seq_along(refs), display_labels(refs)),
-         title="Reference layers", bty="n", cex=.9,
-         inset=c(-.14, 0), xpd=NA)
+  legend(
+    "right",
+    legend=paste(seq_along(refs), display_labels(refs)),
+    title="Reference layers",
+    bty="n",
+    cex=0.9,
+    inset=c(-0.04, 0),
+    xpd=NA
+  )
   add_colorbar(palette)
   dev.off()
 }

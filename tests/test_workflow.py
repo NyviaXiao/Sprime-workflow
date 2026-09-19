@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import json
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -37,13 +38,20 @@ class WorkflowTests(unittest.TestCase):
             c = resolve_config(ROOT/'config/config.yaml', {})
             c['chromosomes'] = ['1', '2']
             c['outdir'] = str(tmp)
+
             for k in ('genetic_map', 'vcf'):
                 c[k] = str(tmp/k)
                 Path(c[k]).touch()
+
             for ref in c['archaic_references']:
                 for k in ('vcf','mask'):
                     ref[k] = str(tmp/(ref['id']+k))
                     Path(ref[k]).touch()
+
+            (tmp / 'resolved_config.json').write_text(
+                json.dumps(c, indent=2) + '\n'
+            )
+                    
             with patch.dict(os.environ, {'XDG_CACHE_HOME':str(tmp/'cache')}):
                 with SnakemakeApi() as api:
                     wf = api.workflow(ResourceSettings(cores=2), config_settings=ConfigSettings(config=c),
@@ -110,6 +118,10 @@ class WorkflowTests(unittest.TestCase):
                     ref[key] = str(tmp/(ref['id']+key)); Path(ref[key]).touch()
             c['individual']['enabled'] = c['affinity']['enabled'] = c['adaptive']['enabled'] = c['report']['enabled'] = False
             c['plots']['contour']['enabled'] = False
+
+            (tmp / 'resolved_config.json').write_text(
+                json.dumps(c, indent=2) + '\n'
+            )
             with patch.dict(os.environ, {'XDG_CACHE_HOME':str(tmp/'cache')}):
                 with SnakemakeApi() as api:
                     wf = api.workflow(ResourceSettings(cores=2), config_settings=ConfigSettings(config=c), storage_settings=StorageSettings(shared_fs_usage=set()), snakefile=ROOT/'workflow/Snakefile', workdir=tmp)

@@ -4,3 +4,11 @@ __pycache__/
 *.pyc
 .venv-test/
 .test-results/
+nohup.out
+deal.sh
+tests/
+README.test.md
+legacy/
+config/config-test.yaml
+config/samples-test-1pop.tsv
+config/samples-test.tsv
