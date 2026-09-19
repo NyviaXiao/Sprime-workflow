@@ -6,6 +6,7 @@ import json
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).parents[1]
 spec = importlib.util.spec_from_file_location('report', ROOT/'workflow/scripts/build_report.py')
@@ -62,6 +63,30 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn('1.234567', rendered)
         self.assertIn('class="compact"', rendered)
 
+    def test_report_hides_git_and_provenance_without_pdf_runtime(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            run = tmp/'run.json'; run.write_text(json.dumps({
+                'run_time':'now', 'genome_build':'GRCh37', 'populations':['P'],
+                'chromosomes':['1'], 'archaic_references':['n1', 'd1'],
+                'enabled_modules': {'report': True}, 'git_commit':'abc',
+                'git_dirty': True, 'git_diff_sha256':'digest'}))
+            config = tmp/'config.json'; config.write_text(json.dumps(self.config()))
+            software = tmp/'software.tsv'; self.write_tsv(software, ['software','version'], [{'software':'python','version':'x'}])
+            classes = tmp/'classification.tsv'; self.write_tsv(classes,
+                report.CLASSIFICATION_COLUMNS,
+                [{'population':'P','archaic_class':'neanderthal','n_segments':'1','genome_coverage_mb':'0.1'}])
+            output = tmp/'report.html'
+            with mock.patch.object(report, '_write_pdf'):
+                report.build_report(output, tmp/'report.pdf', run, software, config,
+                                    classes, [], [], [], None, None, None, [], None, None)
+            page = output.read_text(encoding='utf-8').lower()
+            for forbidden in ('github', 'git_commit', 'git_dirty', 'git_diff_sha256',
+                              'workflow commit', 'working tree dirty', 'provenance',
+                              'reproducibility & provenance'):
+                self.assertNotIn(forbidden, page)
+            self.assertNotIn('i. reproducibility & provenance', page)
+
     def test_research_report_html_and_pdf(self):
         try:
             import matplotlib, weasyprint
@@ -84,7 +109,7 @@ class ReportTests(unittest.TestCase):
             html_path, pdf_path = report_dir/'report.html', report_dir/'report.pdf'
             report.build_report(html_path, pdf_path, run, software, config, classes, [], [], [affinity], contour, individual, gmm, [one], segments, top2, shared, report_dir/'classification_summary.png', report_dir/'individual_summary.png')
             page = html_path.read_text(encoding='utf-8')
-            for heading in ('Executive Summary', 'A. Run Overview', 'A2. Analysis Settings', 'B. Classification Results', 'D1. Neanderthal Affinity', 'D2. Denisovan Affinity', 'I. Reproducibility & Provenance'):
+            for heading in ('Executive Summary', 'A. Run Overview', 'A2. Analysis Settings', 'B. Classification Results', 'D1. Neanderthal Affinity', 'D2. Denisovan Affinity'):
                 self.assertIn(heading, page)
             self.assertIn('10 Neanderthal-classified', page); self.assertIn('4.21 Mb', page)
             self.assertIn('4 Neanderthal-associated and 3 Denisovan-associated passing segments', page)
@@ -93,7 +118,9 @@ class ReportTests(unittest.TestCase):
             compact_gmm = report._table([{'population':'P','reference':'d1','n_segments':'10','status':'ok','method':'legacy','selected_components':'2','adjusted_p_1_vs_2':'.01','second_comparison':'2_vs_3','adjusted_p_second':'.2'}], report.GMM_COLUMNS)
             self.assertNotIn('n_segments', compact_gmm); self.assertNotIn('status', compact_gmm); self.assertNotIn('method', compact_gmm); self.assertNotIn('second_comparison', compact_gmm)
             self.assertNotIn('loglik_1', page); self.assertNotIn('aic_1', page); self.assertNotIn('bic_3', page)
-            self.assertNotIn('git_diff_sha256', page); self.assertIn('provenance/</code> directory', page)
+            for forbidden in ('GitHub', 'git_commit', 'git_dirty', 'git_diff_sha256', 'Workflow commit', 'Working tree dirty', 'provenance', 'Reproducibility & Provenance'):
+                self.assertNotIn(forbidden, page)
+            self.assertNotIn('I. Reproducibility & Provenance', page)
             self.assertGreater(pdf_path.stat().st_size, 0)
 
 

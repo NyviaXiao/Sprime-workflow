@@ -32,8 +32,36 @@ class LandscapeSmokeTests(unittest.TestCase):
         self.assertIn('y0=0, y1=1', affinity)
         self.assertNotIn('top to bottom', affinity)
         self.assertIn('display_labels <- function', affinity)
+        self.assertIn('map_reference_labels <- function', affinity)
         self.assertIn('add_colorbar <- function', affinity)
         self.assertIn('rasterImage', affinity)
+        self.assertIn('mar=c(0, 0, 0, 0)', affinity)
+        self.assertNotIn('axis(1,', affinity)
+        self.assertNotIn('mtext("Match rate"', affinity)
+
+    def test_reference_ids_map_to_configured_tags_when_r_is_available(self):
+        rscript = shutil.which('Rscript')
+        if not rscript:
+            self.skipTest('Rscript is not installed')
+        script = (ROOT/'workflow/scripts/plot_affinity_landscape.R').as_posix()
+        expression = (
+            'setClass("Snakemake", slots=c(params="list", config="list")); '
+            'snakemake <- new("Snakemake", params=list(genome_build="GRCh37", chromosomes="1"), config=list(archaic_references=list())); '
+            f'source("{script}"); '
+            'out <- map_reference_labels(c("n1", "d1"), list('
+            'list(id="n1", tag="Altai"), list(id="d1", tag="Denisovan3"))); '
+            'if (!identical(out, c("Altai", "Denisovan3"))) quit(status=1)'
+        )
+        # The full plotting script needs Snakemake at the bottom; extract only
+        # the label helper definitions for this deterministic mapping check.
+        source = (ROOT/'workflow/scripts/plot_affinity_landscape.R').read_text()
+        helper = source.split('draw_group <- function', 1)[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            helper_path = pathlib.Path(tmp)/'labels.R'
+            helper_path.write_text(helper)
+            expression = expression.replace(script, helper_path.as_posix())
+            completed = subprocess.run([rscript, '--vanilla', '-e', expression], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_r_landscape_smoke_when_runtime_is_available(self):
         rscript = shutil.which('Rscript')

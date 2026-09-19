@@ -15,33 +15,37 @@ if (snakemake@params[["genome_build"]] != "GRCh37") {
 chromosomes <- unique(normalize_chr(snakemake@params[["chromosomes"]]))
 
 add_colorbar <- function(palette) {
-  # A true continuous raster colour bar, rather than three discrete swatches.
+  # Draw the continuous legend in a margin-free inset so the short panel
+  # cannot trigger R's "figure margins too large" error.
   old <- par(no.readonly=TRUE)
   on.exit(par(old), add=TRUE)
-  par(fig=c(0.30, 0.70, 0.018, 0.085), new=TRUE,
-      mar=c(1.8, 0.5, 1.2, 0.5), xpd=NA)
-  plot.new(); plot.window(xlim=c(0, 1), ylim=c(0, 1))
-  rasterImage(as.raster(matrix(palette, nrow=1)), 0, 0.36, 1, 0.68, interpolate=FALSE)
-  box(which="plot", col="#B8C3C8")
-  axis(1, at=c(0, .5, 1), labels=c("0", "0.5", "1"), tick=FALSE,
-       line=-.35, cex.axis=.82)
-  mtext("Match rate", side=3, line=.05, cex=.86)
+  par(fig=c(0.32, 0.68, 0.015, 0.13), new=TRUE,
+      mar=c(0, 0, 0, 0), xpd=NA)
+  plot.new()
+  plot.window(xlim=c(0, 1), ylim=c(0, 1), xaxs="i", yaxs="i")
+  rasterImage(as.raster(matrix(palette, nrow=1)),
+              0.03, 0.40, 0.97, 0.62, interpolate=FALSE)
+  rect(0.03, 0.40, 0.97, 0.62, border="#B8C3C8", lwd=0.8)
+  text(x=c(0.03, 0.5, 0.97), y=0.24,
+       labels=c("0", "0.5", "1"), cex=0.82)
+  text(x=0.5, y=0.82, labels="Match rate", cex=0.88)
+}
+
+map_reference_labels <- function(ids, configured) {
+  labels <- as.character(ids)
+  if (!length(configured)) return(labels)
+  for (i in seq_along(labels)) {
+    hit <- Filter(function(ref) identical(as.character(ref$id), labels[[i]]), configured)
+    if (length(hit) && !is.null(hit[[1]]$tag)) labels[[i]] <- as.character(hit[[1]]$tag)
+  }
+  labels
 }
 
 display_labels <- function(ids) {
-  labels <- as.character(ids)
-  # Snakemake exposes the resolved config to R scripts. Use configured tags
-  # only for figure labels; internal IDs and all file mappings remain intact.
-  if ("config" %in% slotNames(snakemake)) {
-    configured <- snakemake@config[["archaic_references"]]
-    if (length(configured)) {
-      for (i in seq_along(labels)) {
-        hit <- Filter(function(ref) identical(as.character(ref$id), labels[[i]]), configured)
-        if (length(hit) && !is.null(hit[[1]]$tag)) labels[[i]] <- as.character(hit[[1]]$tag)
-      }
-    }
-  }
-  labels
+  # Tags are presentation labels only; IDs still control all file mapping.
+  configured <- list()
+  if ("config" %in% slotNames(snakemake)) configured <- snakemake@config[["archaic_references"]]
+  map_reference_labels(ids, configured)
 }
 
 draw_group <- function(output, paths, refs, wanted, palette) {
